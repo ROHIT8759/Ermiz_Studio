@@ -460,6 +460,118 @@ function Code({ value, maxH = 260 }: { value: unknown; maxH?: number }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JsonHighlight — syntax-coloured JSON viewer
+// ─────────────────────────────────────────────────────────────────────────────
+
+function JsonHighlight({ value, maxH = 360 }: { value: unknown; maxH?: number }) {
+  const text = JSON.stringify(value, null, 2);
+  type Token = { t: string; c: string };
+  const tokens: Token[] = [];
+  // regex groups: 1=key, 2=string-value, 3=number, 4=bool/null, 5=punctuation
+  const re = /("(?:[^"\\]|\\.)*")\s*:|(\"(?:[^"\\]|\\.)*\")|([-\d.eE+]+(?!["\w.]))|(\btrue\b|\bfalse\b|\bnull\b)|([{}\[\],:])/g;
+  let last = 0, m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) tokens.push({ t: text.slice(last, m.index), c: C.fg });
+    if (m[1]) {
+      tokens.push({ t: m[1], c: "#93c5fd" });
+      tokens.push({ t: text.slice(m.index + m[1].length, re.lastIndex), c: C.muted });
+    } else if (m[2]) tokens.push({ t: m[2], c: "#86efac" });
+    else if (m[3]) tokens.push({ t: m[3], c: "#fcd34d" });
+    else if (m[4]) tokens.push({ t: m[4], c: "#f9a8d4" });
+    else if (m[5]) tokens.push({ t: m[5], c: C.muted });
+    last = re.lastIndex;
+  }
+  if (last < text.length) tokens.push({ t: text.slice(last), c: C.fg });
+  return (
+    <pre style={{
+      fontFamily: "Menlo, Consolas, 'Courier New', monospace", fontSize: 12,
+      background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+      padding: "12px 14px", margin: 0, whiteSpace: "pre",
+      overflowX: "auto", overflowY: "auto", maxHeight: maxH, lineHeight: 1.65,
+    }}>
+      {tokens.map((tok, i) => <span key={i} style={{ color: tok.c }}>{tok.t}</span>)}
+    </pre>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TabBar + KVTable — Postman-style request editor primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+type KVRow = { id: string; enabled: boolean; key: string; value: string };
+function mkKV(key = "", value = ""): KVRow {
+  return { id: Math.random().toString(36).slice(2), enabled: true, key, value };
+}
+
+function TabBar({ tabs, active, onChange }: {
+  tabs: string[]; active: string; onChange: (t: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
+      {tabs.map((t) => {
+        const on = t === active;
+        return (
+          <button key={t} type="button" onClick={() => onChange(t)} style={{
+            background: "none", border: "none",
+            borderBottom: `2px solid ${on ? C.primary : "transparent"}`,
+            color: on ? C.primary : C.muted,
+            padding: "8px 16px", fontSize: 12, fontWeight: on ? 600 : 400,
+            cursor: "pointer", marginBottom: -1, transition: "color .15s, border-color .15s",
+          }}>
+            {t}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function KVTable({ rows, onChange, keyPlaceholder = "Key", valPlaceholder = "Value" }: {
+  rows: KVRow[];
+  onChange: (rows: KVRow[]) => void;
+  keyPlaceholder?: string;
+  valPlaceholder?: string;
+}) {
+  const update = (id: string, patch: Partial<KVRow>) =>
+    onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
+  const add = () => onChange([...rows, mkKV()]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {rows.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 2fr 22px", gap: "4px 8px", marginBottom: 6 }}>
+          <span />
+          <span style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: "0.05em" }}>KEY</span>
+          <span style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: "0.05em" }}>VALUE</span>
+          <span />
+        </div>
+      )}
+      {rows.map((r) => (
+        <div key={r.id} style={{ display: "grid", gridTemplateColumns: "18px 1fr 2fr 22px", gap: "4px 8px", alignItems: "center", marginBottom: 5 }}>
+          <input type="checkbox" checked={r.enabled} onChange={(e) => update(r.id, { enabled: e.target.checked })}
+            style={{ flexShrink: 0, accentColor: C.primary, width: 13, height: 13 }} />
+          <input style={{ ...INPUT, opacity: r.enabled ? 1 : 0.45, padding: "6px 8px" }}
+            placeholder={keyPlaceholder} value={r.key}
+            onChange={(e) => update(r.id, { key: e.target.value })} />
+          <input style={{ ...INPUT, opacity: r.enabled ? 1 : 0.45, padding: "6px 8px" }}
+            placeholder={valPlaceholder} value={r.value}
+            onChange={(e) => update(r.id, { value: e.target.value })} />
+          <button type="button" onClick={() => remove(r.id)}
+            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 15, padding: 0, lineHeight: 1 }}>
+            ×
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={add}
+        style={{ ...btn(), fontSize: 11, padding: "4px 10px", marginTop: 4, alignSelf: "flex-start" }}>
+        + Add row
+      </button>
+    </div>
+  );
+}
+
 type RunResult = { status: number; latency: number; body: unknown };
 
 function ResultBox({ r }: { r: RunResult }) {
@@ -470,7 +582,7 @@ function ResultBox({ r }: { r: RunResult }) {
         <Badge label={`${r.status}`} color={ok ? C.green : C.red} />
         <span style={{ fontSize: 11, color: C.muted }}>{r.latency}ms</span>
       </div>
-      <Code value={r.body} />
+      <JsonHighlight value={r.body} maxH={260} />
     </div>
   );
 }
@@ -516,41 +628,110 @@ function FieldInputs({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API Pane — real CRUD against in-memory store
+// API Pane — Postman-style request builder + real CRUD against in-memory store
 // ─────────────────────────────────────────────────────────────────────────────
 
+type AuthType = "None" | "Bearer" | "API Key" | "Basic";
+type BodyMode = "none" | "json" | "form";
+
 function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
-  void sv; // consumed to re-render when store changes
+  void sv;
   const isRest = node.protocol === "rest";
-  const bodyFields = node.request?.body?.schema ?? [];
-  const pathParams = node.request?.pathParams ?? [];
-  const queryParams = node.request?.queryParams ?? [];
-  const headerFields = node.request?.headers ?? [];
 
-  const [pv, setPv] = useState(() => initVals(pathParams));
-  const [qv, setQv] = useState(() => initVals(queryParams));
-  const [hv, setHv] = useState(() => initVals(headerFields));
-  const [bv, setBv] = useState(() => initVals(bodyFields));
+  // ── request state ──────────────────────────────────────────────────────────
+  const [method, setMethod] = useState<string>(node.method ?? "GET");
+  const [url, setUrl] = useState(node.route ?? "/");
+
+  const pathFields  = node.request?.pathParams  ?? [];
+  const queryFields = node.request?.queryParams ?? [];
+  const headerFields = node.request?.headers   ?? [];
+  const bodyFields  = node.request?.body?.schema ?? [];
+
+  const [paramRows, setParamRows] = useState<KVRow[]>(() => [
+    ...pathFields .map((f) => mkKV(f.name, mockForField(f.name, f.type))),
+    ...queryFields.map((f) => mkKV(f.name, mockForField(f.name, f.type))),
+  ]);
+  const [headerRows, setHeaderRows] = useState<KVRow[]>(() =>
+    headerFields.map((f) => mkKV(f.name, mockForField(f.name, f.type)))
+  );
+  const [authType, setAuthType] = useState<AuthType>("None");
+  const [authToken, setAuthToken]   = useState("");
+  const [apiKeyName, setApiKeyName] = useState("X-API-Key");
+  const [apiKeyVal, setApiKeyVal]   = useState("");
+  const [basicUser, setBasicUser]   = useState("");
+  const [basicPass, setBasicPass]   = useState("");
+
+  const [bodyMode, setBodyMode] = useState<BodyMode>(bodyFields.length > 0 ? "json" : "none");
+  const [bodyJson, setBodyJson] = useState(() => {
+    if (!bodyFields.length) return "";
+    const obj: Record<string, unknown> = {};
+    bodyFields.forEach((f) => { obj[f.name] = mockForField(f.name, f.type); });
+    return JSON.stringify(obj, null, 2);
+  });
+  const [bodyForm, setBodyForm] = useState<KVRow[]>(() =>
+    bodyFields.map((f) => mkKV(f.name, mockForField(f.name, f.type)))
+  );
+  const [jsonError, setJsonError] = useState<string | null>(null);
+
+  // ── response state ────────────────────────────────────────────────────────
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<RunResult | null>(null);
-  const [showBrowse, setShowBrowse] = useState(false);
+  const [result, setResult]   = useState<RunResult | null>(null);
+  const [resTab, setResTab]   = useState<"Body" | "Headers">("Body");
+  const [reqTab, setReqTab]   = useState<"Params" | "Auth" | "Headers" | "Body">("Params");
 
-  const setF = (s: React.Dispatch<React.SetStateAction<Record<string, string>>>) =>
-    (k: string, v: string) => s((p) => ({ ...p, [k]: v }));
+  // static response headers (simulated)
+  const resHeaders = useMemo(() => ({
+    "Content-Type": "application/json",
+    "X-Request-Id": "req_" + Math.random().toString(36).slice(2, 10),
+    "Cache-Control": "no-cache",
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── constructed URL preview ───────────────────────────────────────────────
+  const constructedUrl = useMemo(() => {
+    let u = url;
+    paramRows.filter((r) => r.enabled && r.key && url.includes(`:${r.key}`))
+      .forEach((r) => { u = u.replace(`:${r.key}`, encodeURIComponent(r.value)); });
+    const qRows = paramRows.filter((r) => r.enabled && r.key && !url.includes(`:${r.key}`));
+    if (qRows.length) {
+      const qs = qRows.map((r) => `${encodeURIComponent(r.key)}=${encodeURIComponent(r.value)}`).join("&");
+      u += (u.includes("?") ? "&" : "?") + qs;
+    }
+    return u;
+  }, [url, paramRows]);
+
+  // ── send ──────────────────────────────────────────────────────────────────
   const send = useCallback(async () => {
+    const bodyVals: Record<string, string> = {};
+    if (bodyMode === "json" && bodyJson.trim()) {
+      try {
+        const parsed = JSON.parse(bodyJson);
+        if (typeof parsed === "object" && parsed !== null)
+          Object.entries(parsed).forEach(([k, v]) => { bodyVals[k] = String(v); });
+        setJsonError(null);
+      } catch {
+        setJsonError("Invalid JSON — fix before sending");
+        return;
+      }
+    } else if (bodyMode === "form") {
+      bodyForm.filter((r) => r.enabled && r.key).forEach((r) => { bodyVals[r.key] = r.value; });
+    }
+    const pathVals: Record<string, string> = {};
+    paramRows.filter((r) => r.enabled && r.key && url.includes(`:${r.key}`))
+      .forEach((r) => { pathVals[r.key] = r.value; });
+    const queryVals: Record<string, string> = {};
+    paramRows.filter((r) => r.enabled && r.key && !url.includes(`:${r.key}`))
+      .forEach((r) => { queryVals[r.key] = r.value; });
+
     setRunning(true);
     const ms = randMs(60, 300);
     await wait(ms);
-    const { status, body } = handleApiRequest(
-      node.method ?? "GET", node.route ?? "/",
-      pv, qv, bv
-    );
+    const { status, body } = handleApiRequest(method, url, pathVals, queryVals, bodyVals);
     setResult({ status, latency: ms, body });
-    if (status < 400) setShowBrowse(true);
+    setResTab("Body");
     setRunning(false);
-  }, [node, pv, qv, bv]);
+  }, [method, url, paramRows, bodyMode, bodyJson, bodyForm]);
 
+  // ── non-REST fallback ─────────────────────────────────────────────────────
   if (!isRest) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -559,9 +740,10 @@ function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
         </NodeTitle>
         <Panel>
           <SLabel>Protocol Config</SLabel>
-          {node.instance ? <Code value={(node.instance as { config: unknown }).config} /> : (
-            <div style={{ fontSize: 12, color: C.muted }}>No instance config defined.</div>
-          )}
+          {node.instance
+            ? <JsonHighlight value={(node.instance as { config: unknown }).config} />
+            : <div style={{ fontSize: 12, color: C.muted }}>No instance config defined.</div>
+          }
         </Panel>
         <div style={{ fontSize: 12, color: C.muted }}>
           Live connection testing for <strong style={{ color: C.fg }}>{node.protocol}</strong> requires a running server.
@@ -570,65 +752,223 @@ function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
     );
   }
 
-  const resource = resourceName(node.route ?? "");
+  const resource = resourceName(url);
   const recordCount = getTable(resource).size();
-  const mc = MC[node.method ?? "GET"] ?? C.primary;
+  const methodColor = MC[method] ?? C.primary;
+  const statusOk = result && result.status < 400;
+  const statusColor = result ? (statusOk ? C.green : C.red) : C.muted;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Title */}
+
+      {/* ── endpoint title ── */}
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-          <Badge label={node.method ?? "GET"} color={mc} />
-          <code style={{ fontSize: 14, fontWeight: 700, color: C.fg }}>{node.route}</code>
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.fg }}>{node.label}</span>
           {node.deprecated && <Badge label="DEPRECATED" color={C.amber} />}
         </div>
-        <div style={{ fontSize: 12, color: C.muted }}>{node.description || node.label}</div>
+        {node.description && <div style={{ fontSize: 12, color: C.muted }}>{node.description}</div>}
         <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
           Resource: <code style={{ color: C.primary }}>{resource}</code>
           {" · "}
           <span style={{ color: recordCount > 0 ? C.green : C.muted }}>
-            {recordCount} record{recordCount !== 1 ? "s" : ""} in store
+            {recordCount} record{recordCount !== 1 ? "s" : ""} stored
           </span>
         </div>
       </div>
 
-      {/* Inputs */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <FieldInputs label="Path Parameters" fields={pathParams} values={pv} onChange={setF(setPv)} />
-        <FieldInputs label="Query Parameters" fields={queryParams} values={qv} onChange={setF(setQv)} />
-        <FieldInputs label="Headers" fields={headerFields} values={hv} onChange={setF(setHv)} />
-        <FieldInputs
-          label={`Body · ${node.request?.body?.contentType ?? "application/json"}`}
-          fields={bodyFields} values={bv} onChange={setF(setBv)}
+      {/* ── URL bar ── */}
+      <div style={{
+        display: "flex", border: `1px solid ${C.border}`,
+        borderRadius: 9, overflow: "hidden", background: C.bg,
+      }}>
+        <select value={method} onChange={(e) => setMethod(e.target.value)} style={{
+          background: `color-mix(in srgb, ${methodColor} 18%, ${C.float})`,
+          color: methodColor, border: "none", padding: "0 14px",
+          fontSize: 12, fontWeight: 700, fontFamily: "monospace",
+          cursor: "pointer", outline: "none", minWidth: 94, flexShrink: 0,
+        }}>
+          {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+        <div style={{ width: 1, background: C.border, flexShrink: 0 }} />
+        <input
+          value={url} onChange={(e) => setUrl(e.target.value)}
+          placeholder="/api/resource/:id" spellCheck={false}
+          style={{
+            flex: 1, background: "transparent", border: "none",
+            color: C.fg, padding: "11px 14px", fontSize: 13,
+            fontFamily: "Menlo, Consolas, monospace", outline: "none",
+          }}
         />
-        {!pathParams.length && !queryParams.length && !headerFields.length && !bodyFields.length && (
-          <div style={{ fontSize: 12, color: C.muted }}>No inputs defined for this endpoint.</div>
-        )}
+        <button type="button" onClick={send} disabled={running} style={{
+          background: running ? C.float : `color-mix(in srgb, ${C.primary} 22%, ${C.float})`,
+          color: running ? C.muted : C.primary, border: "none",
+          padding: "0 22px", fontSize: 13, fontWeight: 700,
+          cursor: running ? "not-allowed" : "pointer",
+          display: "flex", alignItems: "center", gap: 7, flexShrink: 0,
+        }}>
+          {running ? <><Spinner /> Sending…</> : "Send"}
+        </button>
       </div>
 
-      <button style={btn(true)} onClick={send} disabled={running}>
-        {running ? <><Spinner /> Sending…</> : `▶  Send ${node.method ?? "GET"}`}
-      </button>
+      {/* constructed URL hint */}
+      {constructedUrl !== url && (
+        <div style={{ fontSize: 11, color: C.muted, marginTop: -10, fontFamily: "monospace" }}>
+          → {constructedUrl}
+        </div>
+      )}
 
-      {result && <ResultBox r={result} />}
+      {/* ── request editor ── */}
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
+        <TabBar
+          tabs={["Params", "Auth", "Headers", "Body"]}
+          active={reqTab}
+          onChange={(t) => setReqTab(t as typeof reqTab)}
+        />
+        <div style={{ padding: 14 }}>
 
-      {/* Browse stored records */}
-      {recordCount > 0 && (
-        <div>
-          <button
-            style={{ ...btn(), fontSize: 11, padding: "5px 10px" }}
-            onClick={() => setShowBrowse((p) => !p)}
-          >
-            {showBrowse ? "▾ Hide records" : "▸ Browse stored records"} ({recordCount})
-          </button>
-          {showBrowse && (
-            <div style={{ marginTop: 10 }}>
-              <Code value={getTable(resource).all()} maxH={220} />
+          {reqTab === "Params" && (
+            <KVTable rows={paramRows} onChange={setParamRows}
+              keyPlaceholder="param" valPlaceholder="value" />
+          )}
+
+          {reqTab === "Auth" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <SLabel>Type</SLabel>
+                <select style={INPUT} value={authType}
+                  onChange={(e) => setAuthType(e.target.value as AuthType)}>
+                  {(["None", "Bearer", "API Key", "Basic"] as AuthType[]).map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              {authType === "Bearer" && (
+                <div>
+                  <SLabel>Token</SLabel>
+                  <input style={INPUT} value={authToken}
+                    onChange={(e) => setAuthToken(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIs…" />
+                </div>
+              )}
+              {authType === "API Key" && (
+                <>
+                  <div>
+                    <SLabel>Header name</SLabel>
+                    <input style={INPUT} value={apiKeyName} onChange={(e) => setApiKeyName(e.target.value)} />
+                  </div>
+                  <div>
+                    <SLabel>Value</SLabel>
+                    <input style={INPUT} value={apiKeyVal}
+                      onChange={(e) => setApiKeyVal(e.target.value)} placeholder="sk-…" />
+                  </div>
+                </>
+              )}
+              {authType === "Basic" && (
+                <>
+                  <div>
+                    <SLabel>Username</SLabel>
+                    <input style={INPUT} value={basicUser} onChange={(e) => setBasicUser(e.target.value)} />
+                  </div>
+                  <div>
+                    <SLabel>Password</SLabel>
+                    <input style={{ ...INPUT, fontFamily: "monospace" }} type="password"
+                      value={basicPass} onChange={(e) => setBasicPass(e.target.value)} />
+                  </div>
+                </>
+              )}
+              {authType === "None" && (
+                <div style={{ fontSize: 12, color: C.muted }}>No authentication.</div>
+              )}
+            </div>
+          )}
+
+          {reqTab === "Headers" && (
+            <KVTable rows={headerRows} onChange={setHeaderRows}
+              keyPlaceholder="Header-Name" valPlaceholder="value" />
+          )}
+
+          {reqTab === "Body" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", gap: 16 }}>
+                {(["none", "json", "form"] as BodyMode[]).map((t) => (
+                  <label key={t} style={{
+                    display: "flex", alignItems: "center", gap: 5, fontSize: 12,
+                    color: bodyMode === t ? C.fg : C.muted, cursor: "pointer",
+                  }}>
+                    <input type="radio" name="bodyMode" checked={bodyMode === t}
+                      onChange={() => setBodyMode(t)} style={{ accentColor: C.primary }} />
+                    {t === "none" ? "none" : t === "json" ? "raw JSON" : "form-data"}
+                  </label>
+                ))}
+              </div>
+              {bodyMode === "json" && (
+                <div>
+                  <textarea
+                    style={{
+                      ...INPUT, minHeight: 140, resize: "vertical",
+                      fontFamily: "Menlo, Consolas, monospace", fontSize: 12,
+                    }}
+                    value={bodyJson}
+                    onChange={(e) => { setBodyJson(e.target.value); setJsonError(null); }}
+                    spellCheck={false}
+                    placeholder={'{\n  "key": "value"\n}'}
+                  />
+                  {jsonError && (
+                    <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>⚠ {jsonError}</div>
+                  )}
+                </div>
+              )}
+              {bodyMode === "form" && (
+                <KVTable rows={bodyForm} onChange={setBodyForm} />
+              )}
+              {bodyMode === "none" && (
+                <div style={{ fontSize: 12, color: C.muted }}>This request has no body.</div>
+              )}
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── response section ── */}
+      {result && (
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
+          {/* status bar */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "9px 16px",
+            background: `color-mix(in srgb, ${statusColor} 8%, ${C.float})`,
+            borderBottom: `1px solid ${C.border}`,
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: statusColor }}>
+              {result.status} {statusOk ? "OK" : "Error"}
+            </span>
+            <span style={{ fontSize: 11, color: C.muted }}>{result.latency} ms</span>
+            <span style={{ fontSize: 11, color: C.muted }}>
+              {JSON.stringify(result.body).length} B
+            </span>
+          </div>
+          <TabBar tabs={["Body", "Headers"]} active={resTab} onChange={(t) => setResTab(t as typeof resTab)} />
+          <div style={{ padding: 14 }}>
+            {resTab === "Body" && <JsonHighlight value={result.body} maxH={380} />}
+            {resTab === "Headers" && (
+              <div>
+                {Object.entries(resHeaders).map(([k, v]) => (
+                  <div key={k} style={{
+                    display: "flex", padding: "6px 0",
+                    borderBottom: `1px solid ${C.border}`, gap: 16, fontSize: 12,
+                  }}>
+                    <span style={{ color: "#93c5fd", fontFamily: "monospace", minWidth: 180 }}>{k}</span>
+                    <span style={{ color: C.fg, fontFamily: "monospace" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
+
     </div>
   );
 }

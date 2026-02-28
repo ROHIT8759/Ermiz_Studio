@@ -1138,6 +1138,24 @@ export const ApiBindingSchema = z.object({
 });
 
 // ============================================
+// API Endpoint Block (Database tab – links to API interface)
+// ============================================
+export const ApiEndpointBlockSchema = z.object({
+  kind: z.literal("api_endpoint"),
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  /** ID of the API binding node in the API canvas this references */
+  targetApiId: z.string().default(""),
+  /** HTTP method shown on the badge (derived from the referenced API) */
+  method: z.string().optional(),
+  /** Route path shown on the badge */
+  route: z.string().optional(),
+  /** Protocol hint: rest, ws, graphql, etc. */
+  protocol: z.string().optional(),
+});
+
+// ============================================
 // Node Data - Union of all kinds
 // ============================================
 export const NodeDataSchema = z.union([
@@ -1147,6 +1165,7 @@ export const NodeDataSchema = z.union([
   ServiceBoundaryBlockSchema,
   InfraBlockSchema,
   ApiBindingSchema,
+  ApiEndpointBlockSchema,
 ]);
 
 // ============================================
@@ -1208,3 +1227,4 @@ export type OutputField = z.infer<typeof OutputFieldSchema>;
 export type ProcessStep = z.infer<typeof ProcessStepSchema>;
 export type SecurityScheme = z.infer<typeof SecuritySchemeSchema>;
 export type RateLimit = z.infer<typeof RateLimitSchema>;
+export type ApiEndpointBlock = z.infer<typeof ApiEndpointBlockSchema>;

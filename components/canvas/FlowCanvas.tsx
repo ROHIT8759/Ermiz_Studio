@@ -20,6 +20,7 @@ import { ProcessNode } from "./nodes/ProcessNode";
 import { DatabaseNode } from "./nodes/DatabaseNode";
 import { QueueNode } from "./nodes/QueueNode";
 import { ApiBindingNode } from "./nodes/ApiBindingNode";
+import { ApiEndpointNode } from "./nodes/ApiEndpointNode";
 import { InfraNode } from "./nodes/InfraNode";
 import { ServiceBoundaryNode } from "./nodes/ServiceBoundaryNode";
 import { StepEdge } from "./edges/StepEdge";
@@ -30,6 +31,7 @@ const nodeTypes: NodeTypes = {
   database: DatabaseNode as unknown as ComponentType<NodeProps>,
   queue: QueueNode as unknown as ComponentType<NodeProps>,
   api_binding: ApiBindingNode as unknown as ComponentType<NodeProps>,
+  api_endpoint: ApiEndpointNode as unknown as ComponentType<NodeProps>,
   infra: InfraNode as unknown as ComponentType<NodeProps>,
   service_boundary: ServiceBoundaryNode as unknown as ComponentType<NodeProps>,
 };

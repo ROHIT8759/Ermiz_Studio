@@ -19,6 +19,7 @@ import {
   OutputField,
   ProcessDefinition,
   ProcessStep,
+  ApiEndpointBlock,
 } from "@/lib/schema/node";
 
 export type NodeKind =
@@ -43,7 +44,8 @@ export type NodeKind =
   | "infra_rds"
   | "infra_lb"
   | "infra_hpc"
-  | "function_entry";
+  | "function_entry"
+  | "api_endpoint";
 
 type GraphPreset = "empty" | "hello_world_api";
 
@@ -737,6 +739,19 @@ export const useStore = create<RFState>((set, get) => {
             processRef: "",
             description: "Incoming webhook callback interface",
           },
+        },
+        api_endpoint: {
+          type: "api_endpoint",
+          data: {
+            kind: "api_endpoint",
+            id: `api_ep_${Date.now()}`,
+            label: "API Endpoint",
+            description: "",
+            targetApiId: "",
+            method: "GET",
+            route: "/api/resource",
+            protocol: "rest",
+          } as ApiEndpointBlock,
         },
         infra_ec2: {
           type: "infra",

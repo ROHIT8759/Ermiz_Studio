@@ -317,6 +317,13 @@ export const databaseSections: SidebarSection[] = [
     title: "Interfaces",
     items: [
       {
+        kind: "api_endpoint",
+        label: "API Endpoint",
+        icon: "🔌",
+        hoverColor: "#60a5fa",
+        hint: "Link to an API interface in the API tab",
+      },
+      {
         kind: "api_rest",
         label: "REST Interface",
         icon: "🔗",

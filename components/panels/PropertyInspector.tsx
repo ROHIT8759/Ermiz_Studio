@@ -21,6 +21,7 @@ import {
   InfraBlock,
   InfraResourceType,
   ApiBinding,
+  ApiEndpointBlock,
   InputField,
   OutputField,
 } from "@/lib/schema/node";
@@ -3530,6 +3531,133 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
           />
         </>
       )}
+
+      {/* API Endpoint fields (Database tab – links to API tab) */}
+      {kind === "api_endpoint" && (() => {
+        const epData = nodeData as unknown as ApiEndpointBlock;
+        const apiGraph = graphs.api;
+        const apiNodes = (apiGraph?.nodes || [])
+          .map((n) => n.data as { kind?: string; id?: string; label?: string; protocol?: string; method?: string; route?: string })
+          .filter((d) => d.kind === "api_binding");
+        const resolvedApi = apiNodes.find((a) => a.id === epData.targetApiId) || null;
+
+        return (
+          <>
+            <div style={sectionStyle}>
+              <div style={labelStyle}>Linked API Interface</div>
+              <select
+                value={epData.targetApiId || ""}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  const api = apiNodes.find((a) => a.id === selectedId);
+                  handleUpdate({
+                    targetApiId: selectedId,
+                    method: api?.method || epData.method,
+                    route: api?.route || epData.route,
+                    protocol: api?.protocol || epData.protocol,
+                  } as Partial<NodeData>);
+                }}
+                style={selectStyle}
+              >
+                <option value="">-- Select API interface --</option>
+                {apiNodes.map((api) => (
+                  <option key={api.id} value={api.id}>
+                    {api.label || api.id}{api.method ? ` [${api.method}]` : ""}{api.route ? ` ${api.route}` : ""}
+                  </option>
+                ))}
+              </select>
+              {apiNodes.length === 0 && (
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                  No API interfaces found. Add interface blocks in the API tab first.
+                </div>
+              )}
+            </div>
+
+            {resolvedApi && (
+              <div style={sectionStyle}>
+                <div style={labelStyle}>Linked Interface Details</div>
+                <div
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    padding: 8,
+                    background: "var(--floating)",
+                    display: "grid",
+                    gap: 4,
+                    fontSize: 11,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)" }}>Protocol:</span>
+                    <span style={{ color: "var(--secondary)", fontWeight: 600, textTransform: "uppercase" }}>
+                      {resolvedApi.protocol || "rest"}
+                    </span>
+                  </div>
+                  {resolvedApi.method && (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ color: "var(--muted)" }}>Method:</span>
+                      <span style={{ color: "var(--secondary)", fontWeight: 600 }}>{resolvedApi.method}</span>
+                    </div>
+                  )}
+                  {resolvedApi.route && (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ color: "var(--muted)" }}>Route:</span>
+                      <span style={{ color: "var(--secondary)", fontFamily: "monospace" }}>{resolvedApi.route}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div style={sectionStyle}>
+              <div style={labelStyle}>Protocol</div>
+              <select
+                value={epData.protocol || "rest"}
+                onChange={(e) => handleUpdate({ protocol: e.target.value } as Partial<NodeData>)}
+                style={selectStyle}
+              >
+                <option value="rest">REST</option>
+                <option value="ws">WebSocket</option>
+                <option value="socket.io">Socket.IO</option>
+                <option value="webrtc">WebRTC</option>
+                <option value="graphql">GraphQL</option>
+                <option value="grpc">gRPC</option>
+                <option value="sse">SSE</option>
+                <option value="webhook">Webhook</option>
+              </select>
+            </div>
+
+            {(epData.protocol === "rest" || !epData.protocol) && (
+              <>
+                <div style={sectionStyle}>
+                  <div style={labelStyle}>Method</div>
+                  <select
+                    value={epData.method || "GET"}
+                    onChange={(e) => handleUpdate({ method: e.target.value } as Partial<NodeData>)}
+                    style={selectStyle}
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={labelStyle}>Route</div>
+                  <input
+                    type="text"
+                    value={epData.route || ""}
+                    onChange={(e) => handleUpdate({ route: e.target.value } as Partial<NodeData>)}
+                    placeholder="/api/resource"
+                    style={inputStyle}
+                  />
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {/* Queue-specific fields */}
       {kind === "queue" && (
