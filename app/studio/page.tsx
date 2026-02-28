@@ -233,20 +233,29 @@ export default function Home() {
       // Hardcoded tech stack + metadata
       const techStack = {
         frontend: "none",
-        backend: "python",
+        backend: "node",
         database: "postgresql",
         deployment: "docker",
       };
 
       const metadata = {
-        language: "python",
-        framework: "fastapi",
-        architectureStyle: "microservices",
+        language: "javaScript",
+        framework: "node.js",
+        architectureStyle: "monolithic",
         generatedBy: "ermiz-studio",
       };
 
       console.log("🛠 Tech Stack:", techStack);
       console.log("🧾 Metadata:", metadata);
+
+      const requestPayload = {
+        nodes: allNodes,
+        edges: alleges,
+        techStack,
+        metadata,
+      };
+
+      console.log("JSON PAYLOAD EXPORT:\n" + JSON.stringify(requestPayload, null, 2));
 
       console.log("🚀 Sending request to /api/gen...");
 
@@ -255,12 +264,7 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          nodes: allNodes,
-          edges: alleges,
-          techStack,
-          metadata,
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       console.log("📡 Response received. Status:", res.status);
