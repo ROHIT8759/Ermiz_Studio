@@ -343,6 +343,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
 
   const panelStyle: React.CSSProperties = {
     width,
+    height: "100%",
     flexShrink: 0,
     borderLeft: "1px solid var(--border)",
     background: "var(--panel)",
@@ -350,12 +351,11 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     display: "flex",
     flexDirection: "column",
     gap: 12,
-    overflowY: "auto",
   };
 
   if (!selectedNode) {
     return (
-      <aside style={panelStyle}>
+      <aside className="sidebar-scroll" style={panelStyle}>
         <div
           style={{
             fontSize: 11,
@@ -708,7 +708,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
 
 
   return (
-    <aside style={panelStyle}>
+    <aside className="sidebar-scroll" style={panelStyle}>
       {/* Header */}
       <div
         style={{
