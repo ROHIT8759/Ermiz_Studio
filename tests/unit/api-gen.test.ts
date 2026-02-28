@@ -84,15 +84,34 @@ const CODE_RESPONSE = (path: string) => ({
 // ---------------------------------------------------------------------------
 
 describe("POST /api/gen", () => {
-  const originalEnv = process.env.GEMINI_API_KEY;
+  // Save originals for all key formats
+  const savedKeys: Record<string, string | undefined> = {};
+
+  function clearAllKeys() {
+    delete process.env.GEMINI_API_KEY;
+    for (let i = 1; i <= 10; i++) {
+      delete process.env[`GEMINI_API_KEY_${i}`];
+    }
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.GEMINI_API_KEY = "test-api-key";
+    // Save current env
+    savedKeys["GEMINI_API_KEY"] = process.env.GEMINI_API_KEY;
+    for (let i = 1; i <= 10; i++) {
+      savedKeys[`GEMINI_API_KEY_${i}`] = process.env[`GEMINI_API_KEY_${i}`];
+    }
+    // Default: single key via numbered format
+    clearAllKeys();
+    process.env.GEMINI_API_KEY_1 = "test-api-key";
   });
 
   afterEach(() => {
-    process.env.GEMINI_API_KEY = originalEnv;
+    // Restore originals
+    clearAllKeys();
+    for (const [key, val] of Object.entries(savedKeys)) {
+      if (val !== undefined) process.env[key] = val;
+    }
   });
 
   // ── 400 guards ────────────────────────────────────────────────────────────
@@ -120,8 +139,8 @@ describe("POST /api/gen", () => {
 
   // ── 500 env guard ─────────────────────────────────────────────────────────
 
-  it("returns 500 when GEMINI_API_KEY is not set", async () => {
-    delete process.env.GEMINI_API_KEY;
+  it("returns 500 when no GEMINI_API_KEY is set", async () => {
+    clearAllKeys();
     const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
     expect(res.status).toBe(500);
     const body = await res.json();
@@ -291,7 +310,9 @@ describe("POST /api/gen", () => {
   // ── multi-key rotation ──────────────────────────────────────────────────
 
   it("rotates to a second API key when the first is quota-exhausted", async () => {
-    process.env.GEMINI_API_KEY = "key-a,key-b";
+    clearAllKeys();
+    process.env.GEMINI_API_KEY_1 = "key-a";
+    process.env.GEMINI_API_KEY_2 = "key-b";
 
     // First call (plan with key-a) → quota error
     // Second call (plan with key-b) → success
@@ -310,7 +331,10 @@ describe("POST /api/gen", () => {
   });
 
   it("returns 429 only when ALL keys are exhausted", async () => {
-    process.env.GEMINI_API_KEY = "key-a,key-b,key-c";
+    clearAllKeys();
+    process.env.GEMINI_API_KEY_1 = "key-a";
+    process.env.GEMINI_API_KEY_2 = "key-b";
+    process.env.GEMINI_API_KEY_3 = "key-c";
 
     // All three keys return quota errors for the plan call
     mockGenerateContent
@@ -325,7 +349,9 @@ describe("POST /api/gen", () => {
   });
 
   it("reports remaining key count in X-Gemini-Keys header", async () => {
-    process.env.GEMINI_API_KEY = "key-a,key-b";
+    clearAllKeys();
+    process.env.GEMINI_API_KEY_1 = "key-a";
+    process.env.GEMINI_API_KEY_2 = "key-b";
 
     mockGenerateContent
       .mockResolvedValueOnce(PLAN_RESPONSE)

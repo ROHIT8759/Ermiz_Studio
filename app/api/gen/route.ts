@@ -16,11 +16,23 @@ class QuotaExceededError extends Error {
 }
 
 /**
- * Parse GEMINI_API_KEY env var as a comma-separated list of keys.
- * Supports multiple keys for quota rotation (when one key is exhausted,
- * the next is tried automatically).
+ * Collect Gemini API keys from environment variables.
+ * Supports two formats:
+ *   1) Numbered keys: GEMINI_API_KEY_1, GEMINI_API_KEY_2, … GEMINI_API_KEY_N
+ *   2) Comma-separated: GEMINI_API_KEY="key1,key2,key3"
+ * Numbered keys take priority when present.
  */
 function getApiKeys(): string[] {
+  // 1) Collect numbered keys (GEMINI_API_KEY_1 … GEMINI_API_KEY_N)
+  const numbered: string[] = [];
+  for (let i = 1; ; i++) {
+    const val = process.env[`GEMINI_API_KEY_${i}`]?.trim();
+    if (!val) break;
+    numbered.push(val);
+  }
+  if (numbered.length > 0) return numbered;
+
+  // 2) Fall back to comma-separated GEMINI_API_KEY
   const raw = process.env.GEMINI_API_KEY || "";
   return raw.split(",").map((k) => k.trim()).filter(Boolean);
 }
