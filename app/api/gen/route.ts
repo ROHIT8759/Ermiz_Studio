@@ -78,6 +78,31 @@ function getQuotaRetryAfter(error: unknown): number | null {
   return null;
 }
 
+/**
+ * Runs `fn` over `items` with at most `limit` concurrent tasks.
+ * Each worker picks the next available item so fast tasks don't block slow ones.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const i = cursor++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+  return results;
+}
+
 interface GenRequestBody {
   nodes: Node[];
   edges: Edge[];
@@ -132,20 +157,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2) Generate code files in parallel (cap at 20 to avoid timeout)
+    // 2) Generate code files with bounded concurrency (one worker per API key).
+    //    Round-robin key assignment ensures simultaneous requests each use a
+    //    different key — no pile-up on key #0 like Promise.all would cause.
     const filesToGenerate = architecturePlan.files.slice(0, 20);
-    const generatedEntries = await Promise.all(
-      filesToGenerate.map(async (file) => {
+    const concurrency = Math.max(1, apiKeys.length); // e.g. 5 keys → 5 workers
+    const generatedEntries = await mapWithConcurrency(
+      filesToGenerate,
+      concurrency,
+      async (file, idx) => {
         const code = await genCodeAi({
           filePath: file.path,
           description: file.description,
           fullPlan: architecturePlan,
           apiKeys,
           exhaustedKeys,
+          startKeyIndex: idx % apiKeys.length, // round-robin starting key
           onRequest: () => { geminiCallCount++; },
         });
         return [file.path, code] as const;
-      }),
+      },
     );
     const generatedFiles = Object.fromEntries(generatedEntries);
 
@@ -263,7 +294,7 @@ ${JSON.stringify(
       const ai = new GoogleGenAI({ apiKey: input.apiKeys[i] });
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
       });
       input.onRequest?.();
@@ -316,6 +347,8 @@ async function genCodeAi(input: {
   };
   apiKeys: string[];
   exhaustedKeys: Set<number>;
+  /** Index of the preferred starting key (round-robin assignment). */
+  startKeyIndex?: number;
   onRequest?: () => void;
 }): Promise<string> {
   const prompt = `
@@ -357,15 +390,20 @@ Strict Rules:
 Generate complete code now.
 `;
 
-  // Try each API key in order, skipping already-exhausted ones
-  for (let i = 0; i < input.apiKeys.length; i++) {
+  // Try each API key starting from the round-robin assigned index,
+  // wrapping around, and skipping already-exhausted keys.
+  const n = input.apiKeys.length;
+  const start = (input.startKeyIndex ?? 0) % n;
+
+  for (let attempt = 0; attempt < n; attempt++) {
+    const i = (start + attempt) % n;
     if (input.exhaustedKeys.has(i)) continue;
 
     try {
       const ai = new GoogleGenAI({ apiKey: input.apiKeys[i] });
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
       });
       input.onRequest?.();
