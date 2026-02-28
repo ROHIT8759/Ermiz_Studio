@@ -436,7 +436,6 @@ export function WorkspaceCanvas({
                   </div>
                 )}
                 <div
-                  className="sidebar-scroll"
                   style={{
                     border: "1px solid var(--border)",
                     borderRadius: 12,
@@ -444,10 +443,6 @@ export function WorkspaceCanvas({
                     padding: 8,
                     display: "grid",
                     gap: 6,
-                    maxHeight: "min(56vh, 520px)",
-                    overflowY: "auto",
-                    overflowX: "hidden",
-                    overscrollBehaviorY: "contain",
                   }}
                 >
                   {filteredFlatItems.map((item) => (
@@ -565,15 +560,10 @@ export function WorkspaceCanvas({
                   </div>
                   {!collapsedSections[section.id] && (
                     <div
-                      className="sidebar-scroll"
                       style={{
                         padding: 8,
                         display: "grid",
                         gap: 6,
-                        maxHeight: "min(34vh, 320px)",
-                        overflowY: "auto",
-                        overflowX: "hidden",
-                        overscrollBehaviorY: "contain",
                       }}
                     >
                       {section.items.map((item, index) => (
