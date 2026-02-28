@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/logout", "/favicon.ico"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const res = NextResponse.next();
   const bypassAuthForE2E =
     process.env.E2E_BYPASS_AUTH === "1" ||
     req.headers.get("x-e2e-bypass-auth") === "1";
@@ -18,10 +17,29 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/api/webhook");
 
   if (isPublic) {
-    return res;
+    return NextResponse.next();
   }
 
-  const supabase = createMiddlewareClient({ req, res });
+  let res = NextResponse.next({ request: req });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
+          res = NextResponse.next({ request: req });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
 
   const {
     data: { session },
