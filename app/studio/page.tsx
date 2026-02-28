@@ -65,8 +65,8 @@ export default function Home() {
     } catch {
       // ignore storage errors
     }
-  // importGraphs is stable (zustand action)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // importGraphs is stable (zustand action)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch real credit balance when user is authenticated
