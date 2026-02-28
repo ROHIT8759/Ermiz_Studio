@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { z } from "zod";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { ensureUser, requireCredits } from "@/lib/credit";
 
@@ -24,7 +23,7 @@ const createSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = await getSupabaseServerClient();
     const {
       data: { user },
       error: authError,
@@ -82,7 +81,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = await getSupabaseServerClient();
     const {
       data: { user },
       error: authError,

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { z } from "zod";
 import { ensureUser, requireCredits } from "@/lib/credit";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
   amount: z.number().int().positive(),
@@ -10,7 +9,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = await getSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

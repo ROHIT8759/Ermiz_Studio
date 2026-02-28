@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { prisma } from "@/lib/prisma";
 import { ensureUser, refreshMonthlyCredits } from "@/lib/credit";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET() {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = await getSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
