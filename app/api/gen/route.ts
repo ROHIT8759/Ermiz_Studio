@@ -87,12 +87,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 1) Plan architecture
+    let geminiCallCount = 0;
     const architecturePlan = await planArchitectureAi({
       nodes: body.nodes,
       edges: body.edges,
       techStack: body.techStack,
       metadata: body.metadata,
       apiKey: process.env.GEMINI_API_KEY!,
+      onRequest: () => { geminiCallCount++; },
     });
 
     if (!architecturePlan?.files || !Array.isArray(architecturePlan.files)) {
@@ -111,6 +113,7 @@ export async function POST(req: NextRequest) {
           description: file.description,
           fullPlan: architecturePlan,
           apiKey: process.env.GEMINI_API_KEY!,
+          onRequest: () => { geminiCallCount++; },
         });
         return [file.path, code] as const;
       }),
@@ -130,6 +133,8 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": 'attachment; filename="generated-project.zip"',
+        "X-Gemini-Requests": String(geminiCallCount),
+        "X-Generated-Files": String(filesToGenerate.length),
       },
     });
   } catch (error: unknown) {
@@ -163,6 +168,7 @@ async function planArchitectureAi(input: {
   techStack?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   apiKey: string;
+  onRequest?: () => void;
 }): Promise<{
   projectName: string;
   description: string;
@@ -224,9 +230,10 @@ ${JSON.stringify(
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash-lite",
       contents: prompt,
     });
+    input.onRequest?.();
 
     const text = response.text?.trim();
 
@@ -268,6 +275,7 @@ async function genCodeAi(input: {
     files: { path: string; description: string }[];
   };
   apiKey: string;
+  onRequest?: () => void;
 }): Promise<string> {
   try {
     const ai = new GoogleGenAI({
@@ -314,9 +322,10 @@ Generate complete code now.
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-lite",
+      model: "gemini-2.5-flash-lite",
       contents: prompt,
     });
+    input.onRequest?.();
 
     let text = response.text?.trim();
 

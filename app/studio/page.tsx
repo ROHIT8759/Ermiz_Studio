@@ -28,6 +28,7 @@ export default function Home() {
   const [genError, setGenError] = useState<string | null>(null);
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
   const retryCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [genStats, setGenStats] = useState<{ requests: number; files: number; time: string } | null>(null);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [commitStatus, setCommitStatus] = useState("Uncommitted changes");
   const [saveState, setSaveState] = useState("Unsaved");
@@ -300,6 +301,8 @@ export default function Home() {
       }
 
       console.log("📦 Receiving ZIP blob...");
+      const geminiRequests = Number(res.headers.get("X-Gemini-Requests") ?? 0);
+      const generatedFiles = Number(res.headers.get("X-Generated-Files") ?? 0);
       const blob = await res.blob();
       console.log("✅ Blob size (bytes):", blob.size);
 
@@ -317,7 +320,12 @@ export default function Home() {
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      console.log("🎉 Generation complete.");
+      setGenStats({
+        requests: geminiRequests,
+        files: generatedFiles,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      });
+      console.log(`🎉 Generation complete. Gemini requests: ${geminiRequests}, files: ${generatedFiles}.`);
     } catch (error) {
       console.error("🔥 Unexpected error during generation:", error);
       setGenError("An unexpected error occurred. Please try again.");
@@ -385,6 +393,45 @@ export default function Home() {
       saveState={saveState}
       commitStatus={commitStatus}
     >
+      {/* Generation stats banner */}
+      {genStats && !genError && (
+        <div
+          style={{
+            background: "color-mix(in srgb, #22c55e 10%, var(--panel) 90%)",
+            borderBottom: "1px solid color-mix(in srgb, #22c55e 30%, transparent)",
+            padding: "7px 18px",
+            fontSize: 11,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexShrink: 0,
+            color: "var(--muted)",
+          }}
+        >
+          <span>
+            ✓ Last generation at {genStats.time} · 
+            <strong style={{ color: "var(--foreground)" }}>{genStats.requests}</strong> Gemini request{genStats.requests !== 1 ? "s" : ""} · 
+            <strong style={{ color: "var(--foreground)" }}>{genStats.files}</strong> file{genStats.files !== 1 ? "s" : ""} generated
+          </span>
+          <button
+            type="button"
+            onClick={() => setGenStats(null)}
+            aria-label="Dismiss"
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "var(--muted)",
+              cursor: "pointer",
+              fontSize: 14,
+              lineHeight: 1,
+              padding: "0 2px",
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {/* Generation error banner */}
       {genError && (
         <div
