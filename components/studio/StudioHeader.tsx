@@ -114,31 +114,31 @@ function HeaderActionButtons({ actions, variant }: HeaderActionButtonsProps) {
       style={
         variant === "desktop"
           ? {
-              border: "1px solid var(--border)",
-              background: action.highlighted
-                ? "color-mix(in srgb, var(--primary) 20%, var(--panel) 80%)"
-                : "var(--floating)",
-              color: action.isLoading ? "var(--muted)" : "var(--foreground)",
-              borderRadius: 8,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: action.isLoading ? "default" : "pointer",
-              opacity: action.isLoading ? 0.6 : 1,
-            }
+            border: "1px solid var(--border)",
+            background: action.highlighted
+              ? "color-mix(in srgb, var(--primary) 20%, var(--panel) 80%)"
+              : "var(--floating)",
+            color: action.isLoading ? "var(--muted)" : "var(--foreground)",
+            borderRadius: 8,
+            padding: "6px 10px",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: action.isLoading ? "default" : "pointer",
+            opacity: action.isLoading ? 0.6 : 1,
+          }
           : {
-              width: "100%",
-              textAlign: "left",
-              border: "1px solid var(--border)",
-              background: action.highlighted
-                ? "color-mix(in srgb, var(--primary) 18%, var(--panel) 82%)"
-                : "var(--floating)",
-              color: action.isLoading ? "var(--muted)" : "var(--foreground)",
-              padding: "7px 8px",
-              fontSize: 12,
-              cursor: action.isLoading ? "default" : "pointer",
-              opacity: action.isLoading ? 0.6 : 1,
-            }
+            width: "100%",
+            textAlign: "left",
+            border: "1px solid var(--border)",
+            background: action.highlighted
+              ? "color-mix(in srgb, var(--primary) 18%, var(--panel) 82%)"
+              : "var(--floating)",
+            color: action.isLoading ? "var(--muted)" : "var(--foreground)",
+            padding: "7px 8px",
+            fontSize: 12,
+            cursor: action.isLoading ? "default" : "pointer",
+            opacity: action.isLoading ? 0.6 : 1,
+          }
       }
     >
       {action.isLoading && action.id === "gen" ? "Generating…" : action.label}

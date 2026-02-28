@@ -26,6 +26,8 @@ export default function Home() {
   const [showUpgradeNotice, setShowUpgradeNotice] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+  const retryCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [commitStatus, setCommitStatus] = useState("Uncommitted changes");
   const [saveState, setSaveState] = useState("Unsaved");
@@ -190,8 +192,29 @@ export default function Home() {
     setActiveWorkspaceTab(activeTab);
   }, [activeTab, setActiveWorkspaceTab]);
 
+  // Keep a stable ref so the countdown interval can call handleGenerateCode
+  // without capturing a stale closure.
+  const handleGenerateCodeRef = useRef<() => Promise<void>>(async () => {});
+
+  // Auto-retry when the countdown reaches null after expiring (not after dismiss).
+  const isCountingDown = useRef(false);
+  useEffect(() => {
+    if (retryCountdown !== null) {
+      isCountingDown.current = true;
+    } else if (isCountingDown.current) {
+      isCountingDown.current = false;
+      // countdown expired naturally → auto retry
+      handleGenerateCodeRef.current();
+    }
+  }, [retryCountdown]);
+
   const handleGenerateCode = async () => {
     setGenError(null);
+    setRetryCountdown(null);
+    if (retryCountdownRef.current) {
+      clearInterval(retryCountdownRef.current);
+      retryCountdownRef.current = null;
+    }
     setIsGenerating(true);
     try {
       console.log("🔹 Starting code generation...");
@@ -243,13 +266,14 @@ export default function Home() {
 
       if (!res.ok) {
         let userMessage = "Code generation failed. Please try again.";
+        let quotaRetryAfter: number | null = null;
         try {
           const body = await res.json();
           if (res.status === 429) {
-            const secs = body.retryAfter ? ` Please wait ${body.retryAfter}s.` : "";
+            quotaRetryAfter = typeof body.retryAfter === "number" ? body.retryAfter : 60;
             userMessage =
-              `⚠️ Gemini free-tier quota exhausted.${secs} ` +
-              "Upgrade your Google AI Studio plan at ai.google.dev to continue.";
+              "Gemini free-tier quota exhausted. Retrying automatically in {SECS}s, " +
+              "or upgrade at ai.google.dev for unlimited usage.";
           } else if (body.error) {
             userMessage = body.error;
           }
@@ -257,6 +281,21 @@ export default function Home() {
           // keep default message
         }
         setGenError(userMessage);
+        if (quotaRetryAfter !== null) {
+          setRetryCountdown(quotaRetryAfter);
+          retryCountdownRef.current = setInterval(() => {
+            setRetryCountdown((prev) => {
+              if (prev === null || prev <= 1) {
+                if (retryCountdownRef.current) {
+                  clearInterval(retryCountdownRef.current);
+                  retryCountdownRef.current = null;
+                }
+                return null;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
         return;
       }
 
@@ -286,6 +325,8 @@ export default function Home() {
       setIsGenerating(false);
     }
   };
+  // Keep the ref always pointing to the latest version so the interval can call it.
+  handleGenerateCodeRef.current = handleGenerateCode;
 
   const handleSaveChanges = () => {
     try {
@@ -349,8 +390,14 @@ export default function Home() {
         <div
           role="alert"
           style={{
-            background: "color-mix(in srgb, #ef4444 14%, var(--panel) 86%)",
-            borderBottom: "1px solid color-mix(in srgb, #ef4444 40%, transparent)",
+            background:
+              retryCountdown !== null
+                ? "color-mix(in srgb, #f59e0b 12%, var(--panel) 88%)"
+                : "color-mix(in srgb, #ef4444 14%, var(--panel) 86%)",
+            borderBottom:
+              retryCountdown !== null
+                ? "1px solid color-mix(in srgb, #f59e0b 40%, transparent)"
+                : "1px solid color-mix(in srgb, #ef4444 40%, transparent)",
             padding: "10px 18px",
             fontSize: 12,
             display: "flex",
@@ -360,24 +407,64 @@ export default function Home() {
             flexShrink: 0,
           }}
         >
-          <span>{genError}</span>
-          <button
-            type="button"
-            onClick={() => setGenError(null)}
-            aria-label="Dismiss"
-            style={{
-              border: "1px solid var(--border)",
-              background: "var(--floating)",
-              color: "var(--foreground)",
-              borderRadius: 8,
-              padding: "4px 10px",
-              fontSize: 11,
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            Dismiss
-          </button>
+          <span>
+            {retryCountdown !== null
+              ? genError.replace("{SECS}", String(retryCountdown))
+              : genError}
+          </span>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {retryCountdown !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  isCountingDown.current = false; // prevent duplicate auto-retry
+                  if (retryCountdownRef.current) {
+                    clearInterval(retryCountdownRef.current);
+                    retryCountdownRef.current = null;
+                  }
+                  setRetryCountdown(null);
+                  setGenError(null);
+                  handleGenerateCode();
+                }}
+                style={{
+                  border: "1px solid #f59e0b",
+                  background: "color-mix(in srgb, #f59e0b 20%, var(--floating))",
+                  color: "var(--foreground)",
+                  borderRadius: 8,
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Retry Now
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                isCountingDown.current = false; // prevent auto-retry
+                if (retryCountdownRef.current) {
+                  clearInterval(retryCountdownRef.current);
+                  retryCountdownRef.current = null;
+                }
+                setRetryCountdown(null);
+                setGenError(null);
+              }}
+              aria-label="Dismiss"
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--floating)",
+                color: "var(--foreground)",
+                borderRadius: 8,
+                padding: "4px 10px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
       {/* Upgrade notice banner */}
