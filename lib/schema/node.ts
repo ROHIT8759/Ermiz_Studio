@@ -149,6 +149,17 @@ export const ProcessDefinitionSchema = z.object({
     .optional(),
   logic: z.string().optional(),
   dependencies: z.array(z.string()).optional(),
+  timeout: z.number().int().min(0).optional(),
+  retryPolicy: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10),
+      backoff: z.enum(["fixed", "linear", "exponential"]),
+      delayMs: z.number().int().min(0),
+    })
+    .optional(),
+  envVars: z.array(z.object({ key: z.string(), value: z.string() })).optional(),
+  tags: z.array(z.string()).optional(),
+  returnType: z.string().optional(),
 });
 
 // ============================================

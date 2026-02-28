@@ -408,6 +408,10 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
   const [wrapLines, setWrapLines] = useState(false);
   const [snippetOpen, setSnippetOpen] = useState(false);
   const [newErrorOutputName, setNewErrorOutputName] = useState("");
+  const [newEnvKey, setNewEnvKey] = useState("");
+  const [newEnvValue, setNewEnvValue] = useState("");
+  const [newTagName, setNewTagName] = useState("");
+  const [editorFontSize, setEditorFontSize] = useState(12);
 
   const selectedNode = nodes.find((n) => n.selected);
 
@@ -977,6 +981,108 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
             </div>
           )}
 
+          {/* Runtime Config: timeout + retry policy */}
+          <div style={sectionStyle}>
+            <div style={{ ...labelStyle, marginBottom: 8 }}>Runtime Config</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {/* Timeout */}
+              <div>
+                <div style={labelStyle}>Timeout</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={900}
+                    value={(nodeData as ProcessDefinition).timeout ?? 0}
+                    onChange={(e) =>
+                      handleUpdate({ timeout: Number(e.target.value) } as Partial<ProcessDefinition>)
+                    }
+                    style={{ ...inputStyle, width: 72 }}
+                  />
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                    {(nodeData as ProcessDefinition).timeout
+                      ? `${(nodeData as ProcessDefinition).timeout}s`
+                      : "seconds  (0 = no limit)"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Retry Policy — async / event_driven only */}
+              {((nodeData as ProcessDefinition).execution === "async" ||
+                (nodeData as ProcessDefinition).execution === "event_driven") && (
+                <div>
+                  <div style={{ ...labelStyle, marginBottom: 6 }}>Retry Policy</div>
+                  <div style={{ display: "grid", gap: 5 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
+                        Max Attempts
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={(nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3}
+                        onChange={(e) =>
+                          handleUpdate({
+                            retryPolicy: {
+                              maxAttempts: Number(e.target.value),
+                              backoff: (nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear",
+                              delayMs: (nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000,
+                            },
+                          } as Partial<ProcessDefinition>)
+                        }
+                        style={{ ...inputStyle, width: 64 }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
+                        Backoff
+                      </span>
+                      <select
+                        value={(nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear"}
+                        onChange={(e) =>
+                          handleUpdate({
+                            retryPolicy: {
+                              maxAttempts: (nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3,
+                              backoff: e.target.value as "fixed" | "linear" | "exponential",
+                              delayMs: (nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000,
+                            },
+                          } as Partial<ProcessDefinition>)
+                        }
+                        style={{ ...selectStyle, flex: 1 }}
+                      >
+                        <option value="fixed">Fixed</option>
+                        <option value="linear">Linear</option>
+                        <option value="exponential">Exponential</option>
+                      </select>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
+                        Initial Delay
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={(nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000}
+                        onChange={(e) =>
+                          handleUpdate({
+                            retryPolicy: {
+                              maxAttempts: (nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3,
+                              backoff: (nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear",
+                              delayMs: Number(e.target.value),
+                            },
+                          } as Partial<ProcessDefinition>)
+                        }
+                        style={{ ...inputStyle, width: 72 }}
+                      />
+                      <span style={{ fontSize: 11, color: "var(--muted)" }}>ms</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {activeTab === "api" && (
             <div style={sectionStyle}>
               <div
@@ -1377,6 +1483,37 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     <span style={{ color: "#ffa657" }}>inputs</span>
                   )}
                   <span style={{ color: "#e6edf3" }}>)</span>
+                  <span style={{ color: "#e6edf3" }}>{": Promise<"}</span>
+                  <span style={{ color: "#ffa657" }}>
+                    {(nodeData as ProcessDefinition).returnType || "any"}
+                  </span>
+                  <span style={{ color: "#e6edf3" }}>{">"}</span>
+                </div>
+                {/* Return type editor */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                  <span style={{ fontSize: 10, color: "var(--muted)", whiteSpace: "nowrap" }}>
+                    Return type
+                  </span>
+                  <input
+                    type="text"
+                    value={(nodeData as ProcessDefinition).returnType ?? ""}
+                    onChange={(e) =>
+                      handleUpdate({ returnType: e.target.value } as Partial<ProcessDefinition>)
+                    }
+                    placeholder="any"
+                    style={{
+                      flex: 1,
+                      background: "#0d1117",
+                      border: "1px solid var(--border)",
+                      borderRadius: 5,
+                      padding: "3px 8px",
+                      fontSize: 11,
+                      color: "#ffa657",
+                      fontFamily: "'Fira Code', 'Cascadia Code', monospace",
+                      outline: "none",
+                      minWidth: 0,
+                    }}
+                  />
                 </div>
               </div>
 
@@ -1434,6 +1571,64 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     >
                       TypeScript
                     </span>
+                    {/* Font size control */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        border: "1px solid var(--border)",
+                        borderRadius: 4,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        title="Decrease font size"
+                        onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}
+                        style={{
+                          border: "none",
+                          borderRight: "1px solid var(--border)",
+                          background: "var(--floating)",
+                          color: "var(--muted)",
+                          padding: "2px 5px",
+                          fontSize: 13,
+                          lineHeight: 1,
+                          cursor: "pointer",
+                        }}
+                      >
+                        −
+                      </button>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: "var(--muted)",
+                          minWidth: 22,
+                          textAlign: "center",
+                          fontFamily: "monospace",
+                          background: "var(--floating)",
+                          padding: "2px 0",
+                        }}
+                      >
+                        {editorFontSize}
+                      </span>
+                      <button
+                        type="button"
+                        title="Increase font size"
+                        onClick={() => setEditorFontSize((s) => Math.min(18, s + 1))}
+                        style={{
+                          border: "none",
+                          borderLeft: "1px solid var(--border)",
+                          background: "var(--floating)",
+                          color: "var(--muted)",
+                          padding: "2px 5px",
+                          fontSize: 13,
+                          lineHeight: 1,
+                          cursor: "pointer",
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
                     <button
                       type="button"
                       title={snippetOpen ? "Close snippets" : "Insert a code snippet"}
@@ -1628,7 +1823,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                       color: "#e6edf3",
                       fontFamily:
                         "'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace",
-                      fontSize: 12,
+                      fontSize: editorFontSize,
                       lineHeight: 1.65,
                       padding: "10px 10px 10px 46px",
                       border: "none",
@@ -1639,6 +1834,24 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                       overflowX: wrapLines ? "hidden" : "auto",
                     }}
                   />
+                  {/* Status bar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "3px 10px 3px 46px",
+                      background: "rgba(0,0,0,0.25)",
+                      borderTop: "1px solid rgba(255,255,255,0.05)",
+                      fontSize: 10,
+                      fontFamily: "'Fira Code', 'Cascadia Code', monospace",
+                      color: "rgba(139,148,158,0.6)",
+                      userSelect: "none",
+                    }}
+                  >
+                    <span>{funcLineCount} lines</span>
+                    <span>{funcLogicValue.length} chars</span>
+                  </div>
                 </div>
 
                 {/* Editor footer actions */}
@@ -1825,6 +2038,233 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                       </span>
                     ))
                   )}
+                </div>
+              </div>
+
+              {/* Environment Variables */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 8 }}>Environment Variables</div>
+                <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5 }}>
+                  Declare env vars this function reads from{" "}
+                  <code style={{ fontFamily: "monospace", background: "var(--background)", padding: "1px 4px", borderRadius: 3, fontSize: 10 }}>
+                    process.env
+                  </code>
+                  .
+                </div>
+                <div style={{ display: "grid", gap: 4, marginBottom: 8 }}>
+                  {((nodeData as ProcessDefinition).envVars ?? []).length === 0 ? (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                      No environment variables declared
+                    </span>
+                  ) : (
+                    ((nodeData as ProcessDefinition).envVars ?? []).map(({ key, value }, i) => (
+                      <div
+                        key={i}
+                        style={{ display: "flex", alignItems: "center", gap: 4 }}
+                      >
+                        <span
+                          style={{
+                            flex: 1,
+                            fontFamily: "monospace",
+                            fontSize: 11,
+                            background: "var(--background)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            padding: "3px 7px",
+                            color: "var(--primary)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            minWidth: 0,
+                          }}
+                        >
+                          {key}
+                        </span>
+                        <span style={{ fontSize: 10, color: "var(--muted)", flexShrink: 0 }}>→</span>
+                        <span
+                          style={{
+                            flex: 1,
+                            fontFamily: "monospace",
+                            fontSize: 11,
+                            background: "var(--background)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 4,
+                            padding: "3px 7px",
+                            color: value ? "var(--secondary)" : "var(--muted)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            fontStyle: value ? "normal" : "italic",
+                            minWidth: 0,
+                          }}
+                        >
+                          {value || "unset"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const vars = [
+                              ...((nodeData as ProcessDefinition).envVars ?? []),
+                            ];
+                            vars.splice(i, 1);
+                            handleUpdate({ envVars: vars } as Partial<ProcessDefinition>);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "var(--muted)",
+                            cursor: "pointer",
+                            fontSize: 14,
+                            padding: 0,
+                            flexShrink: 0,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <input
+                    type="text"
+                    value={newEnvKey}
+                    onChange={(e) => setNewEnvKey(e.target.value.toUpperCase().replace(/\s/g, "_"))}
+                    placeholder="MY_ENV_KEY"
+                    style={{ ...inputStyle, flex: 1, fontFamily: "monospace", fontSize: 11, minWidth: 0 }}
+                  />
+                  <input
+                    type="text"
+                    value={newEnvValue}
+                    onChange={(e) => setNewEnvValue(e.target.value)}
+                    placeholder="default"
+                    style={{ ...inputStyle, flex: 1, fontSize: 11, minWidth: 0 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newEnvKey.trim()) return;
+                      const existing = (nodeData as ProcessDefinition).envVars ?? [];
+                      if (!existing.find((v) => v.key === newEnvKey.trim())) {
+                        handleUpdate({
+                          envVars: [
+                            ...existing,
+                            { key: newEnvKey.trim(), value: newEnvValue.trim() },
+                          ],
+                        } as Partial<ProcessDefinition>);
+                      }
+                      setNewEnvKey("");
+                      setNewEnvValue("");
+                    }}
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--floating)",
+                      color: "var(--secondary)",
+                      borderRadius: 6,
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Tags */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 8 }}>Tags</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                  {((nodeData as ProcessDefinition).tags ?? []).length === 0 ? (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>No tags added</span>
+                  ) : (
+                    ((nodeData as ProcessDefinition).tags ?? []).map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 11,
+                          background: "rgba(135,163,255,0.09)",
+                          color: "var(--primary)",
+                          border: "1px solid rgba(135,163,255,0.22)",
+                          borderRadius: 999,
+                          padding: "2px 8px 2px 10px",
+                        }}
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdate({
+                              tags: ((nodeData as ProcessDefinition).tags ?? []).filter(
+                                (t) => t !== tag,
+                              ),
+                            } as Partial<ProcessDefinition>)
+                          }
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            color: "var(--muted)",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <input
+                    type="text"
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newTagName.trim()) {
+                        const existing = (nodeData as ProcessDefinition).tags ?? [];
+                        if (!existing.includes(newTagName.trim())) {
+                          handleUpdate({
+                            tags: [...existing, newTagName.trim()],
+                          } as Partial<ProcessDefinition>);
+                        }
+                        setNewTagName("");
+                      }
+                    }}
+                    placeholder="tag-name  (Enter)"
+                    style={{ ...inputStyle, flex: 1, fontSize: 11 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newTagName.trim()) return;
+                      const existing = (nodeData as ProcessDefinition).tags ?? [];
+                      if (!existing.includes(newTagName.trim())) {
+                        handleUpdate({
+                          tags: [...existing, newTagName.trim()],
+                        } as Partial<ProcessDefinition>);
+                      }
+                      setNewTagName("");
+                    }}
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--floating)",
+                      color: "var(--secondary)",
+                      borderRadius: 6,
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Add
+                  </button>
                 </div>
               </div>
             </>

@@ -436,6 +436,7 @@ export function WorkspaceCanvas({
                   </div>
                 )}
                 <div
+                  className="sidebar-section"
                   style={{
                     border: "1px solid var(--border)",
                     borderRadius: 12,
@@ -509,6 +510,7 @@ export function WorkspaceCanvas({
             ) : (
               sections.map((section) => (
                 <div
+                  className="sidebar-section"
                   key={section.id}
                   style={{
                     border: "1px solid var(--border)",
