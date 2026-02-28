@@ -302,7 +302,8 @@ ${JSON.stringify(
       const text = response.text?.trim();
 
       if (!text) {
-        throw new Error("Empty architecture plan response");
+        console.warn(`PLAN: Key #${i + 1} returned empty response, trying next...`);
+        continue; // try next key
       }
 
       // Strip markdown code fences if model wraps JSON
@@ -411,7 +412,8 @@ Generate complete code now.
       let text = response.text?.trim();
 
       if (!text) {
-        throw new Error("Empty code generation response");
+        console.warn(`CODE ${input.filePath}: Key #${i + 1} returned empty response, trying next...`);
+        continue; // try next key
       }
 
       // Remove accidental markdown fences if model adds them
