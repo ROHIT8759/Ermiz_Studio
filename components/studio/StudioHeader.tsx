@@ -15,7 +15,7 @@ export type StudioUser = {
 };
 
 type HeaderAction = {
-  id: "save" | "gen" | "commit" | "reset";
+  id: "save" | "gen" | "commit" | "reset" | "test";
   label: string;
   onClick: () => void;
   title?: string;
@@ -141,7 +141,11 @@ function HeaderActionButtons({ actions, variant }: HeaderActionButtonsProps) {
           }
       }
     >
-      {action.isLoading && action.id === "gen" ? "Generating…" : action.label}
+      {action.isLoading && action.id === "gen"
+        ? "Generating…"
+        : action.isLoading && action.id === "test"
+        ? "Building…"
+        : action.label}
     </button>
   ));
 }
@@ -432,7 +436,9 @@ type StudioHeaderProps = {
   creditLimit: number;
   creditUsedPercent: number;
   isGenerating: boolean;
+  isTestRunning: boolean;
   handleGenerateCode: () => void;
+  handleRunTest: () => void;
   handleSaveChanges: () => void;
   handleCommitChanges: () => void;
   handleResetLayout: () => void;
@@ -458,7 +464,9 @@ export function StudioHeader({
   creditLimit,
   creditUsedPercent,
   isGenerating,
+  isTestRunning,
   handleGenerateCode,
+  handleRunTest,
   handleSaveChanges,
   handleCommitChanges,
   handleResetLayout,
@@ -495,6 +503,13 @@ export function StudioHeader({
       .join("") || "U";
 
   const headerActions: HeaderAction[] = [
+    {
+      id: "test",
+      label: "Run Test",
+      onClick: handleRunTest,
+      isLoading: isTestRunning,
+      title: "Build an interactive test UI from your current design",
+    },
     {
       id: "gen",
       label: HEADER_MENU_TEXT.genCode,

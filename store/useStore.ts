@@ -260,6 +260,24 @@ export const useStore = create<RFState>((set, get) => {
       ) {
         return;
       }
+
+      // Only one Start Function allowed per canvas
+      if (kind === "function_entry") {
+        const existing = nodes.find((node) => {
+          const d = node.data as NodeData;
+          return d.processType === "start_function";
+        });
+        if (existing) {
+          updateActiveGraph({
+            nodes: nodes.map((node) => ({
+              ...node,
+              selected: node.id === existing.id,
+            })),
+          });
+          return;
+        }
+      }
+
       if (kind === "process" && activeTab === "api") {
         const existingApiProcess = nodes.find((node) => {
           const nodeData = node.data as NodeData;

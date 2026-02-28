@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { StudioHeader, StudioUser } from "@/components/studio/StudioHeader";
 import { StudioLayout } from "@/components/studio/StudioLayout";
 import { StudioWorkspace } from "@/components/studio/StudioWorkspace";
+import { TestPanel } from "@/components/studio/TestPanel";
 import {
   STORAGE_KEYS,
   STATUS_TEXT_BY_TAB,
@@ -29,6 +30,7 @@ export default function Home() {
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
   const retryCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [genStats, setGenStats] = useState<{ requests: number; files: number; time: string } | null>(null);
+  const [isTestOpen, setIsTestOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [commitStatus, setCommitStatus] = useState("Uncommitted changes");
   const [saveState, setSaveState] = useState("Unsaved");
@@ -340,6 +342,8 @@ export default function Home() {
   // Keep the ref always pointing to the latest version so the interval can call it.
   handleGenerateCodeRef.current = handleGenerateCode;
 
+  const handleRunTest = () => setIsTestOpen(true);
+
   const handleSaveChanges = () => {
     try {
       localStorage.setItem(STORAGE_KEYS.graphs, JSON.stringify(exportGraphs()));
@@ -575,6 +579,7 @@ export default function Home() {
         creditUsedPercent={creditUsedPercent}
         isGenerating={isGenerating}
         handleGenerateCode={handleGenerateCode}
+        handleRunTest={handleRunTest}
         handleSaveChanges={handleSaveChanges}
         handleCommitChanges={handleCommitChanges}
         handleResetLayout={handleResetLayout}
@@ -595,6 +600,11 @@ export default function Home() {
       <StudioWorkspace
         activeTab={activeTab}
         resetLayoutSignal={resetLayoutSignal}
+      />
+
+      <TestPanel
+        isOpen={isTestOpen}
+        onClose={() => setIsTestOpen(false)}
       />
     </StudioLayout>
   );
