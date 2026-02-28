@@ -35,6 +35,7 @@ import {
   buildDatabaseSchemaDDL,
 } from "@/lib/database/schema-tools";
 import { DatabaseERDViewer } from "./DatabaseERDViewer";
+import { generateOpenApiSpec, generateCurlCommand } from "@/lib/api/openapi-generator";
 import { DataSeedingSection } from "./database/DataSeedingSection";
 import { EnvironmentsSection } from "./database/EnvironmentsSection";
 import { PerformanceSection } from "./database/PerformanceSection";
@@ -397,7 +398,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     "success",
   );
   const schemaImportInputRef = useRef<HTMLInputElement | null>(null);
-  const [requestTab, setRequestTab] = useState<"body" | "headers" | "query">(
+  const [requestTab, setRequestTab] = useState<"body" | "path" | "headers" | "query">(
     "body",
   );
   const [newDepName, setNewDepName] = useState("");
@@ -412,6 +413,13 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
   const [newEnvValue, setNewEnvValue] = useState("");
   const [newTagName, setNewTagName] = useState("");
   const [editorFontSize, setEditorFontSize] = useState(12);
+  const [apiExportCopied, setApiExportCopied] = useState(false);
+  const [curlPreviewOpen, setCurlPreviewOpen] = useState(false);
+  const [newCorsOrigin, setNewCorsOrigin] = useState("");
+  const [newOAuthScope, setNewOAuthScope] = useState("");
+  const [newSocketNamespace, setNewSocketNamespace] = useState("");
+  const [newSocketRoom, setNewSocketRoom] = useState("");
+  const [newSocketEvent, setNewSocketEvent] = useState("");
 
   const selectedNode = nodes.find((n) => n.selected);
 
@@ -476,7 +484,11 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     .map((process) => ({
       id: process.id,
       label: process.label || process.id,
+      processType: process.processType,
     }));
+  const startFunctionDefs = functionDefinitions.filter(
+    (fn) => fn.processType === "start_function",
+  );
   const importedFunctionIds =
     kind === "process" && activeTab === "api"
       ? (nodeData as ProcessDefinition).steps
@@ -810,6 +822,30 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     });
   };
 
+  // Connections: edges from/to the selected node in the current tab
+  const incomingConnections = edges
+    .filter((e) => e.target === selectedNode.id)
+    .map((e) => {
+      const src = nodes.find((n) => n.id === e.source);
+      const srcData = src?.data as NodeData | undefined;
+      const label =
+        srcData && "label" in srcData
+          ? (srcData as { label: string }).label
+          : e.source;
+      return { id: e.source, label };
+    });
+  const outgoingConnections = edges
+    .filter((e) => e.source === selectedNode.id)
+    .map((e) => {
+      const tgt = nodes.find((n) => n.id === e.target);
+      const tgtData = tgt?.data as NodeData | undefined;
+      const label =
+        tgtData && "label" in tgtData
+          ? (tgtData as { label: string }).label
+          : e.target;
+      return { id: e.target, label };
+    });
+
   return (
     <aside className="sidebar-scroll" style={panelStyle}>
       {/* Header */}
@@ -1080,6 +1116,40 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   </div>
                 </div>
               )}
+
+              {/* Memory & Concurrency */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={labelStyle}>Memory (MB)</div>
+                  <input
+                    type="number"
+                    min={128}
+                    max={8192}
+                    step={128}
+                    value={(nodeData as ProcessDefinition).memoryMb ?? 256}
+                    onChange={(e) =>
+                      handleUpdate({ memoryMb: Number(e.target.value) } as Partial<ProcessDefinition>)
+                    }
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <div style={labelStyle}>Max Concurrency</div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={(nodeData as ProcessDefinition).concurrency ?? 1}
+                    onChange={(e) =>
+                      handleUpdate({ concurrency: Number(e.target.value) } as Partial<ProcessDefinition>)
+                    }
+                    style={inputStyle}
+                  />
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 3 }}>
+                    parallel instances
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1094,24 +1164,65 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   marginBottom: 8,
                 }}
               >
-                <span>Imported Functions</span>
-                <span style={{ color: "var(--secondary)" }}>
-                  {importedFunctionIds.length}
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      color: "#4ade80",
+                      background: "rgba(74,222,128,0.1)",
+                      border: "1px solid rgba(74,222,128,0.3)",
+                      borderRadius: 4,
+                      padding: "1px 5px",
+                    }}
+                  >
+                    FUNCTION BLOCKS
+                  </span>
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--secondary)",
+                    background: "var(--background)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 99,
+                    padding: "1px 7px",
+                  }}
+                >
+                  {importedFunctionIds.length} / {startFunctionDefs.length}
                 </span>
               </div>
-              {functionDefinitions.length === 0 ? (
+
+              {startFunctionDefs.length === 0 ? (
                 <div
                   style={{
                     fontSize: 11,
                     color: "var(--muted)",
                     fontStyle: "italic",
+                    padding: "8px 10px",
+                    border: "1px dashed var(--border)",
+                    borderRadius: 6,
+                    lineHeight: 1.6,
                   }}
                 >
-                  No functions found. Add function blocks in the Functions tab.
+                  No start functions found. Add a{" "}
+                  <span style={{ color: "#4ade80", fontStyle: "normal" }}>
+                    ▶ Start Function
+                  </span>{" "}
+                  block in the{" "}
+                  <strong>Functions</strong> tab.
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: 6 }}>
-                  {functionDefinitions.map((fn) => {
+                  {startFunctionDefs.map((fn) => {
                     const checked = importedFunctionIds.includes(fn.id);
                     return (
                       <label
@@ -1122,16 +1233,37 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                           justifyContent: "space-between",
                           gap: 8,
                           fontSize: 11,
-                          color: "var(--secondary)",
-                          border: "1px solid var(--border)",
-                          borderRadius: 6,
-                          padding: "6px 8px",
-                          background: "var(--floating)",
+                          border: checked
+                            ? "1px solid rgba(74,222,128,0.5)"
+                            : "1px solid var(--border)",
+                          borderRadius: 8,
+                          padding: "7px 10px",
+                          background: checked
+                            ? "rgba(74,222,128,0.07)"
+                            : "var(--floating)",
+                          cursor: "pointer",
+                          transition: "background 0.15s, border-color 0.15s",
                         }}
                       >
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {fn.label}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                          <span style={{ color: "#4ade80", fontSize: 11 }}>▶</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div
+                              style={{
+                                color: checked ? "#4ade80" : "var(--secondary)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                fontWeight: checked ? 600 : 400,
+                              }}
+                            >
+                              {fn.label}
+                            </div>
+                            <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 1 }}>
+                              {checked ? "Called by this API" : "Click to wire"}
+                            </div>
+                          </div>
+                        </div>
                         <input
                           type="checkbox"
                           checked={checked}
@@ -1144,25 +1276,28 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                             }
                             const nextSteps = Array.from(currentRefs).map(
                               (ref, index) => ({
-                                id: `import_${index + 1}_${ref}`,
+                                id: `call_${index + 1}_${ref}`,
                                 kind: "ref" as const,
                                 ref,
-                                description: `Import ${ref}`,
+                                description: `Call ${ref}`,
                               }),
                             );
                             handleUpdate({
                               steps: nextSteps,
                             } as Partial<ProcessDefinition>);
                           }}
-                          style={{ accentColor: "var(--primary)" }}
+                          style={{ accentColor: "#4ade80", flexShrink: 0, width: 14, height: 14 }}
                         />
                       </label>
                     );
                   })}
                 </div>
               )}
-              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
-                API Function Block imports reusable logic from Functions tab.
+
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+                Wire this API to{" "}
+                <span style={{ color: "#4ade80" }}>Start Function</span>{" "}
+                blocks defined in the Functions tab. Checked blocks will be called when this API receives a request.
               </div>
             </div>
           )}
@@ -2267,6 +2402,186 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   </button>
                 </div>
               </div>
+
+              {/* Notes / Documentation */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 6 }}>Notes / Documentation</div>
+                <textarea
+                  value={(nodeData as ProcessDefinition).notes ?? ""}
+                  onChange={(e) =>
+                    handleUpdate({ notes: e.target.value } as Partial<ProcessDefinition>)
+                  }
+                  placeholder="Extended documentation, design assumptions, edge cases, references..."
+                  rows={4}
+                  style={{
+                    ...inputStyle,
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                    lineHeight: 1.55,
+                    minHeight: 72,
+                  }}
+                />
+              </div>
+
+              {/* Connections */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 8 }}>Connections</div>
+                {incomingConnections.length === 0 && outgoingConnections.length === 0 ? (
+                  <div style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
+                    No edges connected to this node yet.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {incomingConnections.length > 0 && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "var(--muted)",
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Callers ({incomingConnections.length})
+                        </div>
+                        <div style={{ display: "grid", gap: 3 }}>
+                          {incomingConnections.map((conn) => (
+                            <div
+                              key={conn.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: 11,
+                                color: "var(--secondary)",
+                                background: "var(--floating)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "4px 8px",
+                              }}
+                            >
+                              <span style={{ color: "var(--primary)", fontSize: 10 }}>→</span>
+                              <span
+                                style={{
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {conn.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {outgoingConnections.length > 0 && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "var(--muted)",
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Calls ({outgoingConnections.length})
+                        </div>
+                        <div style={{ display: "grid", gap: 3 }}>
+                          {outgoingConnections.map((conn) => (
+                            <div
+                              key={conn.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: 11,
+                                color: "var(--secondary)",
+                                background: "var(--floating)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "4px 8px",
+                              }}
+                            >
+                              <span style={{ color: "var(--muted)", fontSize: 10 }}>←</span>
+                              <span
+                                style={{
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {conn.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Test Inputs */}
+              {((nodeData as ProcessDefinition).inputs ?? []).length > 0 && (
+                <div style={sectionStyle}>
+                  <div style={{ ...labelStyle, marginBottom: 4 }}>Test Inputs</div>
+                  <div
+                    style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5 }}
+                  >
+                    Mock values for testing. Stored on this block only.
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {((nodeData as ProcessDefinition).inputs ?? []).map((input) => (
+                      <div key={input.name}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            marginBottom: 3,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--secondary)",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {input.name}
+                          </span>
+                          <span style={{ fontSize: 10, color: "var(--muted)" }}>({input.type})</span>
+                          {!input.required && (
+                            <span
+                              style={{
+                                fontSize: 9,
+                                color: "var(--muted)",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              optional
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          value={(nodeData as ProcessDefinition).testInputs?.[input.name] ?? ""}
+                          onChange={(e) => {
+                            const current =
+                              (nodeData as ProcessDefinition).testInputs ?? {};
+                            handleUpdate({
+                              testInputs: { ...current, [input.name]: e.target.value },
+                            } as Partial<ProcessDefinition>);
+                          }}
+                          placeholder={`mock ${input.type} value`}
+                          style={{ ...inputStyle, fontSize: 11 }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </>
@@ -4100,63 +4415,178 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
 
               {isSocketIOProtocol && (
                 <>
+                  {/* Namespaces pill editor */}
                   <div style={{ marginTop: 8 }}>
-                    <div style={labelStyle}>Namespaces (comma-separated)</div>
-                    <input
-                      type="text"
-                      value={((apiNode?.instance?.config as { namespaces?: string[] } | undefined)?.namespaces || []).join(", ")}
-                      onChange={(e) =>
-                        handleUpdate({
-                          instance: {
-                            ...(apiNode?.instance as object),
-                            config: {
-                              ...(apiNode?.instance?.config as object),
-                              namespaces: e.target.value.split(",").map((v) => v.trim()).filter(Boolean),
-                            },
-                          },
-                        } as Partial<ApiBinding>)
-                      }
-                      style={inputStyle}
-                    />
+                    <div style={labelStyle}>Namespaces</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                      {((apiNode?.instance?.config as { namespaces?: string[] } | undefined)?.namespaces || []).map((ns, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 10,
+                            padding: "2px 6px",
+                            background: "var(--floating)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            color: "var(--secondary)",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {ns}
+                          <button
+                            onClick={() => {
+                              const namespaces = ((apiNode?.instance?.config as { namespaces?: string[] } | undefined)?.namespaces || []).filter((_, i) => i !== idx);
+                              handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), namespaces } } } as Partial<ApiBinding>);
+                            }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: 0, fontSize: 10, lineHeight: 1 }}
+                          >×</button>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <input
+                        type="text"
+                        value={newSocketNamespace}
+                        onChange={(e) => setNewSocketNamespace(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newSocketNamespace.trim()) {
+                            const namespaces = [...((apiNode?.instance?.config as { namespaces?: string[] } | undefined)?.namespaces || []), newSocketNamespace.trim()];
+                            handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), namespaces } } } as Partial<ApiBinding>);
+                            setNewSocketNamespace("");
+                          }
+                        }}
+                        placeholder="/namespace"
+                        style={{ ...inputStyle, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (!newSocketNamespace.trim()) return;
+                          const namespaces = [...((apiNode?.instance?.config as { namespaces?: string[] } | undefined)?.namespaces || []), newSocketNamespace.trim()];
+                          handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), namespaces } } } as Partial<ApiBinding>);
+                          setNewSocketNamespace("");
+                        }}
+                        style={{ padding: "6px 10px", background: "var(--floating)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--secondary)", fontSize: 11, cursor: "pointer", flexShrink: 0 }}
+                      >Add</button>
+                    </div>
                   </div>
+
+                  {/* Rooms pill editor */}
                   <div style={{ marginTop: 8 }}>
-                    <div style={labelStyle}>Rooms (comma-separated)</div>
-                    <input
-                      type="text"
-                      value={((apiNode?.instance?.config as { rooms?: string[] } | undefined)?.rooms || []).join(", ")}
-                      onChange={(e) =>
-                        handleUpdate({
-                          instance: {
-                            ...(apiNode?.instance as object),
-                            config: {
-                              ...(apiNode?.instance?.config as object),
-                              rooms: e.target.value.split(",").map((v) => v.trim()).filter(Boolean),
-                            },
-                          },
-                        } as Partial<ApiBinding>)
-                      }
-                      style={inputStyle}
-                    />
+                    <div style={labelStyle}>Rooms</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                      {((apiNode?.instance?.config as { rooms?: string[] } | undefined)?.rooms || []).map((room, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 10,
+                            padding: "2px 6px",
+                            background: "var(--floating)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            color: "var(--secondary)",
+                          }}
+                        >
+                          {room}
+                          <button
+                            onClick={() => {
+                              const rooms = ((apiNode?.instance?.config as { rooms?: string[] } | undefined)?.rooms || []).filter((_, i) => i !== idx);
+                              handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), rooms } } } as Partial<ApiBinding>);
+                            }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: 0, fontSize: 10, lineHeight: 1 }}
+                          >×</button>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <input
+                        type="text"
+                        value={newSocketRoom}
+                        onChange={(e) => setNewSocketRoom(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newSocketRoom.trim()) {
+                            const rooms = [...((apiNode?.instance?.config as { rooms?: string[] } | undefined)?.rooms || []), newSocketRoom.trim()];
+                            handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), rooms } } } as Partial<ApiBinding>);
+                            setNewSocketRoom("");
+                          }
+                        }}
+                        placeholder="room-name"
+                        style={{ ...inputStyle, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (!newSocketRoom.trim()) return;
+                          const rooms = [...((apiNode?.instance?.config as { rooms?: string[] } | undefined)?.rooms || []), newSocketRoom.trim()];
+                          handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), rooms } } } as Partial<ApiBinding>);
+                          setNewSocketRoom("");
+                        }}
+                        style={{ padding: "6px 10px", background: "var(--floating)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--secondary)", fontSize: 11, cursor: "pointer", flexShrink: 0 }}
+                      >Add</button>
+                    </div>
                   </div>
+
+                  {/* Events pill editor */}
                   <div style={{ marginTop: 8 }}>
-                    <div style={labelStyle}>Events (comma-separated)</div>
-                    <input
-                      type="text"
-                      value={((apiNode?.instance?.config as { events?: string[] } | undefined)?.events || []).join(", ")}
-                      onChange={(e) =>
-                        handleUpdate({
-                          instance: {
-                            ...(apiNode?.instance as object),
-                            config: {
-                              ...(apiNode?.instance?.config as object),
-                              events: e.target.value.split(",").map((v) => v.trim()).filter(Boolean),
-                            },
-                          },
-                        } as Partial<ApiBinding>)
-                      }
-                      style={inputStyle}
-                    />
+                    <div style={labelStyle}>Events</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                      {((apiNode?.instance?.config as { events?: string[] } | undefined)?.events || []).map((evt, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 10,
+                            padding: "2px 6px",
+                            background: "var(--floating)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            color: "#38bdf8",
+                          }}
+                        >
+                          {evt}
+                          <button
+                            onClick={() => {
+                              const events = ((apiNode?.instance?.config as { events?: string[] } | undefined)?.events || []).filter((_, i) => i !== idx);
+                              handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), events } } } as Partial<ApiBinding>);
+                            }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: 0, fontSize: 10, lineHeight: 1 }}
+                          >×</button>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <input
+                        type="text"
+                        value={newSocketEvent}
+                        onChange={(e) => setNewSocketEvent(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newSocketEvent.trim()) {
+                            const events = [...((apiNode?.instance?.config as { events?: string[] } | undefined)?.events || []), newSocketEvent.trim()];
+                            handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), events } } } as Partial<ApiBinding>);
+                            setNewSocketEvent("");
+                          }
+                        }}
+                        placeholder="event-name"
+                        style={{ ...inputStyle, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (!newSocketEvent.trim()) return;
+                          const events = [...((apiNode?.instance?.config as { events?: string[] } | undefined)?.events || []), newSocketEvent.trim()];
+                          handleUpdate({ instance: { ...(apiNode?.instance as object), config: { ...(apiNode?.instance?.config as object), events } } } as Partial<ApiBinding>);
+                          setNewSocketEvent("");
+                        }}
+                        style={{ padding: "6px 10px", background: "var(--floating)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--secondary)", fontSize: 11, cursor: "pointer", flexShrink: 0 }}
+                      >Add</button>
+                    </div>
                   </div>
+
                   <div style={{ marginTop: 8 }}>
                     <div style={labelStyle}>Ack Timeout (ms)</div>
                     <input
@@ -4395,43 +4825,87 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   </div>
 
                   <div style={{ marginBottom: 8 }}>
-                    <div style={labelStyle}>RPC Methods (name:type, comma-separated)</div>
-                    <input
-                      type="text"
-                      value={((apiNode?.instance?.config as { rpcMethods?: Array<{ name?: string; type?: string }> } | undefined)?.rpcMethods || [])
-                        .map((method) => `${method.name || ""}:${method.type || "unary"}`)
-                        .join(", ")}
-                      onChange={(e) =>
+                    <div style={labelStyle}>RPC Methods</div>
+                    {((apiNode?.instance?.config as { rpcMethods?: Array<{ name?: string; type?: string }> } | undefined)?.rpcMethods || []).map((method, idx) => (
+                      <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                        <input
+                          type="text"
+                          value={method.name || ""}
+                          onChange={(e) => {
+                            const rpcMethods = [...((apiNode?.instance?.config as { rpcMethods?: Array<{ name?: string; type?: string }> } | undefined)?.rpcMethods || [])];
+                            rpcMethods[idx] = { ...rpcMethods[idx], name: e.target.value };
+                            handleUpdate({
+                              instance: {
+                                ...(apiNode?.instance as object),
+                                config: { ...(apiNode?.instance?.config as object), rpcMethods },
+                              },
+                            } as Partial<ApiBinding>);
+                          }}
+                          placeholder="MethodName"
+                          style={{ ...inputStyle, flex: 1 }}
+                        />
+                        <select
+                          value={method.type || "unary"}
+                          onChange={(e) => {
+                            const rpcMethods = [...((apiNode?.instance?.config as { rpcMethods?: Array<{ name?: string; type?: string }> } | undefined)?.rpcMethods || [])];
+                            rpcMethods[idx] = { ...rpcMethods[idx], type: e.target.value };
+                            handleUpdate({
+                              instance: {
+                                ...(apiNode?.instance as object),
+                                config: { ...(apiNode?.instance?.config as object), rpcMethods },
+                              },
+                            } as Partial<ApiBinding>);
+                          }}
+                          style={{ ...selectStyle, width: 110 }}
+                        >
+                          <option value="unary">Unary</option>
+                          <option value="server_stream">Server Stream</option>
+                          <option value="client_stream">Client Stream</option>
+                          <option value="bidirectional_stream">Bidi Stream</option>
+                        </select>
+                        <button
+                          onClick={() => {
+                            const rpcMethods = ((apiNode?.instance?.config as { rpcMethods?: Array<{ name?: string; type?: string }> } | undefined)?.rpcMethods || []).filter((_, i) => i !== idx);
+                            handleUpdate({
+                              instance: {
+                                ...(apiNode?.instance as object),
+                                config: { ...(apiNode?.instance?.config as object), rpcMethods },
+                              },
+                            } as Partial<ApiBinding>);
+                          }}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--destructive)", fontSize: 14, padding: "0 2px", flexShrink: 0 }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const rpcMethods = [
+                          ...((apiNode?.instance?.config as { rpcMethods?: Array<{ name?: string; type?: string }> } | undefined)?.rpcMethods || []),
+                          { name: "Method", type: "unary" },
+                        ];
                         handleUpdate({
                           instance: {
                             ...(apiNode?.instance as object),
-                            config: {
-                              ...(apiNode?.instance?.config as object),
-                              rpcMethods: e.target.value
-                                .split(",")
-                                .map((entry) => entry.trim())
-                                .filter(Boolean)
-                                .map((entry) => {
-                                  const [rawName, rawType] = entry.split(":").map((v) => v.trim());
-                                  const type = rawType || "unary";
-                                  const normalizedType =
-                                    type === "server_stream" ||
-                                      type === "client_stream" ||
-                                      type === "bidirectional_stream"
-                                      ? type
-                                      : "unary";
-                                  return {
-                                    name: rawName || "Method",
-                                    type: normalizedType,
-                                  };
-                                }),
-                            },
+                            config: { ...(apiNode?.instance?.config as object), rpcMethods },
                           },
-                        } as Partial<ApiBinding>)
-                      }
-                      placeholder="Execute:unary, StreamUpdates:server_stream"
-                      style={inputStyle}
-                    />
+                        } as Partial<ApiBinding>);
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "5px",
+                        background: "transparent",
+                        border: "1px dashed var(--border)",
+                        borderRadius: 4,
+                        color: "var(--muted)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        marginTop: 2,
+                      }}
+                    >
+                      + Add Method
+                    </button>
                   </div>
 
                   <div>
@@ -4961,6 +5435,34 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
             </label>
           </div>
 
+          {/* OpenAPI Export */}
+          {isRestProtocol && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => {
+                  const spec = generateOpenApiSpec(nodeData as ApiBinding);
+                  navigator.clipboard.writeText(JSON.stringify(spec, null, 2));
+                  setApiExportCopied(true);
+                  setTimeout(() => setApiExportCopied(false), 2000);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "7px 12px",
+                  background: apiExportCopied ? "rgba(74,222,128,0.15)" : "transparent",
+                  border: `1px solid ${apiExportCopied ? "#4ade80" : "var(--border)"}`,
+                  borderRadius: 4,
+                  color: apiExportCopied ? "#4ade80" : "var(--secondary)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  fontWeight: 500,
+                  transition: "all 0.2s",
+                }}
+              >
+                {apiExportCopied ? "✓ Copied!" : "↗ Copy OpenAPI 3.0"}
+              </button>
+            </div>
+          )}
+
           {/* Security */}
           {isRestProtocol && (
             <div style={sectionStyle}>
@@ -5005,6 +5507,76 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     placeholder="X-API-Key"
                     style={inputStyle}
                   />
+                </div>
+              )}
+              {(nodeData as ApiBinding).security?.type !== "none" && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={labelStyle}>OAuth2 Scopes</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                    {((nodeData as ApiBinding).security?.scopes || []).map((scope, i) => (
+                      <span
+                        key={i}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 10,
+                          padding: "2px 6px",
+                          background: "var(--floating)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 12,
+                          color: "var(--secondary)",
+                        }}
+                      >
+                        {scope}
+                        <button
+                          onClick={() => {
+                            const scopes = ((nodeData as ApiBinding).security?.scopes || []).filter((_, idx) => idx !== i);
+                            handleUpdate({ security: { ...(nodeData as ApiBinding).security, scopes } } as Partial<ApiBinding>);
+                          }}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: 0, fontSize: 10, lineHeight: 1 }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <input
+                      type="text"
+                      value={newOAuthScope}
+                      onChange={(e) => setNewOAuthScope(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newOAuthScope.trim()) {
+                          const scopes = [...((nodeData as ApiBinding).security?.scopes || []), newOAuthScope.trim()];
+                          handleUpdate({ security: { ...(nodeData as ApiBinding).security, scopes } } as Partial<ApiBinding>);
+                          setNewOAuthScope("");
+                        }
+                      }}
+                      placeholder="read:users"
+                      style={{ ...inputStyle, flex: 1 }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (!newOAuthScope.trim()) return;
+                        const scopes = [...((nodeData as ApiBinding).security?.scopes || []), newOAuthScope.trim()];
+                        handleUpdate({ security: { ...(nodeData as ApiBinding).security, scopes } } as Partial<ApiBinding>);
+                        setNewOAuthScope("");
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        background: "var(--floating)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 4,
+                        color: "var(--secondary)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -5087,6 +5659,150 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
             </div>
           )}
 
+          {/* CORS Configuration */}
+          {isRestProtocol && (
+            <div style={sectionStyle}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 11,
+                  color: "var(--secondary)",
+                  marginBottom: 8,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={(nodeData as ApiBinding).cors?.enabled || false}
+                  onChange={(e) =>
+                    handleUpdate({
+                      cors: {
+                        enabled: e.target.checked,
+                        origins: (nodeData as ApiBinding).cors?.origins || ["*"],
+                        methods: (nodeData as ApiBinding).cors?.methods || ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+                        credentials: (nodeData as ApiBinding).cors?.credentials || false,
+                      },
+                    } as Partial<ApiBinding>)
+                  }
+                  style={{ accentColor: "var(--primary)" }}
+                />
+                Enable CORS
+              </label>
+              {(nodeData as ApiBinding).cors?.enabled && (
+                <>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={labelStyle}>Allowed Origins</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                      {((nodeData as ApiBinding).cors?.origins || []).map((origin, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 10,
+                            padding: "2px 6px",
+                            background: "var(--floating)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            color: "var(--secondary)",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {origin}
+                          <button
+                            onClick={() => {
+                              const origins = ((nodeData as ApiBinding).cors?.origins || []).filter((_, idx) => idx !== i);
+                              handleUpdate({ cors: { ...(nodeData as ApiBinding).cors!, origins } } as Partial<ApiBinding>);
+                            }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: 0, fontSize: 10, lineHeight: 1 }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <input
+                        type="text"
+                        value={newCorsOrigin}
+                        onChange={(e) => setNewCorsOrigin(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newCorsOrigin.trim()) {
+                            const origins = [...((nodeData as ApiBinding).cors?.origins || []), newCorsOrigin.trim()];
+                            handleUpdate({ cors: { ...(nodeData as ApiBinding).cors!, origins } } as Partial<ApiBinding>);
+                            setNewCorsOrigin("");
+                          }
+                        }}
+                        placeholder="https://app.example.com"
+                        style={{ ...inputStyle, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (!newCorsOrigin.trim()) return;
+                          const origins = [...((nodeData as ApiBinding).cors?.origins || []), newCorsOrigin.trim()];
+                          handleUpdate({ cors: { ...(nodeData as ApiBinding).cors!, origins } } as Partial<ApiBinding>);
+                          setNewCorsOrigin("");
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          background: "var(--floating)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 4,
+                          color: "var(--secondary)",
+                          fontSize: 11,
+                          cursor: "pointer",
+                          flexShrink: 0,
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={labelStyle}>Allowed Methods</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"].map((m) => (
+                        <label
+                          key={m}
+                          style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--secondary)", cursor: "pointer" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={((nodeData as ApiBinding).cors?.methods || []).includes(m)}
+                            onChange={(e) => {
+                              const current = (nodeData as ApiBinding).cors?.methods || [];
+                              const methods = e.target.checked
+                                ? [...current, m]
+                                : current.filter((x) => x !== m);
+                              handleUpdate({ cors: { ...(nodeData as ApiBinding).cors!, methods } } as Partial<ApiBinding>);
+                            }}
+                            style={{ accentColor: "var(--primary)" }}
+                          />
+                          {m}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <label
+                    style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--secondary)", cursor: "pointer" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={(nodeData as ApiBinding).cors?.credentials || false}
+                      onChange={(e) =>
+                        handleUpdate({ cors: { ...(nodeData as ApiBinding).cors!, credentials: e.target.checked } } as Partial<ApiBinding>)
+                      }
+                      style={{ accentColor: "var(--primary)" }}
+                    />
+                    Allow Credentials
+                  </label>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Request Schema Tabs */}
           {isRestProtocol && (
             <div style={sectionStyle}>
@@ -5094,7 +5810,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
 
               {/* Tab Buttons */}
               <div style={{ display: "flex", gap: 2, marginBottom: 12 }}>
-                {(["body", "headers", "query"] as const).map((tab) => {
+                {(["body", "path", "headers", "query"] as const).map((tab) => {
                   const showBody =
                     isWsProtocol ||
                     ["POST", "PUT", "PATCH"].includes(
@@ -5102,6 +5818,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     );
                   if (tab === "body" && !showBody) return null;
                   if (isWsProtocol && tab === "query") return null;
+                  if (isWsProtocol && tab === "path") return null;
 
                   const counts: Record<string, number> = {
                     body:
@@ -5362,26 +6079,83 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                 </>
               )}
 
-              {/* Auto-detected Path Params from Route */}
-              {(() => {
-                const route = (nodeData as ApiBinding).route || "";
-                const pathParams = route.match(/:(\w+)/g)?.map(p => p.slice(1)) || [];
-                if (pathParams.length === 0) return null;
-                return (
-                  <div style={{ marginTop: 8, padding: 8, background: "var(--background)", borderRadius: 4 }}>
-                    <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 6 }}>
-                      📍 Path Params (from route):
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {pathParams.map(param => (
-                        <span key={param} style={{ fontSize: 10, padding: "2px 6px", background: "var(--floating)", borderRadius: 3, color: "#facc15", fontFamily: "monospace" }}>
-                          :{param}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* Path Tab */}
+              {requestTab === "path" && (
+                <>
+                  {(() => {
+                    const route = (nodeData as ApiBinding).route || "";
+                    const autoParams = route.match(/:(\w+)/g)?.map(p => p.slice(1)) || [];
+                    return autoParams.length > 0 ? (
+                      <div style={{ marginBottom: 8, padding: "6px 8px", background: "var(--background)", borderRadius: 4 }}>
+                        <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 4 }}>
+                          📍 Detected from route:
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {autoParams.map(param => (
+                            <span key={param} style={{ fontSize: 10, padding: "2px 6px", background: "var(--floating)", borderRadius: 3, color: "#facc15", fontFamily: "monospace" }}>
+                              :{param}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+                  {((nodeData as ApiBinding).request?.pathParams || []).map(
+                    (field, i) => (
+                      <TypeSchemaEditor
+                        key={i}
+                        field={field}
+                        onChange={(updated) => {
+                          const pathParams = [
+                            ...((nodeData as ApiBinding).request?.pathParams || []),
+                          ];
+                          pathParams[i] = updated as InputField;
+                          handleUpdate({
+                            request: {
+                              ...(nodeData as ApiBinding).request,
+                              pathParams,
+                            },
+                          } as Partial<ApiBinding>);
+                        }}
+                        onRemove={() => {
+                          const pathParams = (
+                            (nodeData as ApiBinding).request?.pathParams || []
+                          ).filter((_, idx) => idx !== i);
+                          handleUpdate({
+                            request: {
+                              ...(nodeData as ApiBinding).request,
+                              pathParams,
+                            },
+                          } as Partial<ApiBinding>);
+                        }}
+                      />
+                    ),
+                  )}
+                  <button
+                    onClick={() => {
+                      const pathParams = [
+                        ...((nodeData as ApiBinding).request?.pathParams || []),
+                        { name: "id", type: "string", required: true } as InputField,
+                      ];
+                      handleUpdate({
+                        request: { ...(nodeData as ApiBinding).request, pathParams },
+                      } as Partial<ApiBinding>);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "6px",
+                      background: "transparent",
+                      border: "1px dashed var(--border)",
+                      borderRadius: 4,
+                      color: "var(--muted)",
+                      fontSize: 11,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + Add Path Param
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -5472,29 +6246,224 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
               >
                 + Add Field
               </button>
-              <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 8 }}>
-                💡 Error responses (400, 404, 500) are auto-generated based on
-                validation & database errors
+            </div>
+          )}
+
+          {/* Error Response Schema */}
+          {isRestProtocol && (
+            <div style={sectionStyle}>
+              <div
+                style={{
+                  ...labelStyle,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                  color: "#ef4444",
+                }}
+              >
+                <span>Error Response Schema</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "var(--muted)" }}>Status</span>
+                  <input
+                    type="number"
+                    value={(nodeData as ApiBinding).responses?.error?.statusCode ?? 400}
+                    onChange={(e) =>
+                      handleUpdate({
+                        responses: {
+                          ...(nodeData as ApiBinding).responses,
+                          error: {
+                            ...(nodeData as ApiBinding).responses?.error,
+                            statusCode: parseInt(e.target.value) || 400,
+                          },
+                        },
+                      } as Partial<ApiBinding>)
+                    }
+                    style={{ ...inputStyle, width: 60, textAlign: "center" }}
+                  />
+                </div>
               </div>
+              {((nodeData as ApiBinding).responses?.error?.schema || []).map(
+                (field, i) => (
+                  <TypeSchemaEditor
+                    key={i}
+                    field={field}
+                    onChange={(updated) => {
+                      const schema = [
+                        ...((nodeData as ApiBinding).responses?.error?.schema || []),
+                      ];
+                      schema[i] = updated as OutputField;
+                      handleUpdate({
+                        responses: {
+                          ...(nodeData as ApiBinding).responses,
+                          error: {
+                            ...(nodeData as ApiBinding).responses?.error,
+                            schema,
+                          },
+                        },
+                      } as Partial<ApiBinding>);
+                    }}
+                    onRemove={() => {
+                      const schema = (
+                        (nodeData as ApiBinding).responses?.error?.schema || []
+                      ).filter((_, idx) => idx !== i);
+                      handleUpdate({
+                        responses: {
+                          ...(nodeData as ApiBinding).responses,
+                          error: {
+                            ...(nodeData as ApiBinding).responses?.error,
+                            schema,
+                          },
+                        },
+                      } as Partial<ApiBinding>);
+                    }}
+                  />
+                ),
+              )}
+              <button
+                onClick={() => {
+                  const schema = [
+                    ...((nodeData as ApiBinding).responses?.error?.schema || []),
+                    { name: "message", type: "string" } as OutputField,
+                  ];
+                  handleUpdate({
+                    responses: {
+                      ...(nodeData as ApiBinding).responses,
+                      error: {
+                        ...(nodeData as ApiBinding).responses?.error,
+                        schema,
+                      },
+                    },
+                  } as Partial<ApiBinding>);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "6px",
+                  background: "transparent",
+                  border: "1px dashed rgba(239,68,68,0.4)",
+                  borderRadius: 4,
+                  color: "#ef4444",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  marginTop: 4,
+                }}
+              >
+                + Add Error Field
+              </button>
+            </div>
+          )}
+
+          {/* cURL Preview */}
+          {isRestProtocol && (
+            <div style={sectionStyle}>
+              <button
+                onClick={() => setCurlPreviewOpen(!curlPreviewOpen)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "var(--secondary)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                <span>cURL Preview</span>
+                <span style={{ color: "var(--muted)", fontSize: 9 }}>{curlPreviewOpen ? "▲" : "▾"}</span>
+              </button>
+              {curlPreviewOpen && (() => {
+                const curlCmd = generateCurlCommand(nodeData as ApiBinding);
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <pre
+                      style={{
+                        background: "var(--background)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 4,
+                        padding: "10px 12px",
+                        fontSize: 10,
+                        fontFamily: "monospace",
+                        color: "var(--foreground)",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-all",
+                        margin: 0,
+                      }}
+                    >
+                      {curlCmd}
+                    </pre>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(curlCmd);
+                      }}
+                      style={{
+                        marginTop: 6,
+                        padding: "4px 10px",
+                        background: "transparent",
+                        border: "1px solid var(--border)",
+                        borderRadius: 4,
+                        color: "var(--muted)",
+                        fontSize: 10,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Copy cURL
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
           {/* Function Block Reference */}
           <div style={sectionStyle}>
-            <div style={labelStyle}>Invokes Function Block</div>
-            <input
-              type="text"
-              value={(nodeData as ApiBinding).processRef}
-              onChange={(e) =>
-                handleUpdate({
-                  processRef: e.target.value,
-                } as Partial<ApiBinding>)
-              }
-              placeholder="createUser"
-              style={inputStyle}
-            />
+            <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <span>Invokes Function Block</span>
+              {allFunctionIds.length > 0 && (
+                <span style={{ color: "var(--secondary)", fontSize: 10 }}>
+                  {allFunctionIds.length} available
+                </span>
+              )}
+            </div>
+            {allFunctionIds.length === 0 ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  fontStyle: "italic",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "6px 10px",
+                  background: "var(--floating)",
+                }}
+              >
+                No function blocks found. Add function blocks in the Functions workspace.
+              </div>
+            ) : (
+              <select
+                value={(nodeData as ApiBinding).processRef}
+                onChange={(e) =>
+                  handleUpdate({
+                    processRef: e.target.value,
+                  } as Partial<ApiBinding>)
+                }
+                style={selectStyle}
+              >
+                <option value="">— Select a function block —</option>
+                {allFunctionIds.map((fn) => (
+                  <option key={fn.id} value={fn.id}>
+                    {fn.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
-              Reference to the function block this interface invokes
+              The function block this API interface invokes when called
             </div>
           </div>
         </>

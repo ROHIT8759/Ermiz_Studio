@@ -325,8 +325,18 @@ export const ApiBindingNode = memo(({ data, selected }: NodeProps) => {
 
             <div style={{ display: "flex", gap: 12 }}>
               <div>
-                <span style={{ fontSize: 9, color: "#4ade80" }}>
-                  {apiData.responses?.success?.statusCode}
+                <span
+                  style={{
+                    fontSize: 9,
+                    color: "#4ade80",
+                    padding: "1px 4px",
+                    background: "rgba(74,222,128,0.1)",
+                    borderRadius: 3,
+                    display: "inline-block",
+                    marginBottom: 3,
+                  }}
+                >
+                  {apiData.responses?.success?.statusCode || 200}
                 </span>
                 {(apiData.responses?.success?.schema || []).map(
                   (f: OutputField, i: number) => (
@@ -340,23 +350,31 @@ export const ApiBindingNode = memo(({ data, selected }: NodeProps) => {
                 )}
               </div>
 
-              {(apiData.responses?.error?.schema?.length || 0) > 0 && (
-                <div>
-                  <span style={{ fontSize: 9, color: "#ef4444" }}>
-                    {apiData.responses?.error?.statusCode}
-                  </span>
-                  {(apiData.responses?.error?.schema || []).map(
-                    (f: OutputField, i: number) => (
-                      <div
-                        key={i}
-                        style={{ fontSize: 10, color: "var(--secondary)" }}
-                      >
-                        {f.name}
-                      </div>
-                    ),
-                  )}
-                </div>
-              )}
+              <div>
+                <span
+                  style={{
+                    fontSize: 9,
+                    color: "#ef4444",
+                    padding: "1px 4px",
+                    background: "rgba(239,68,68,0.1)",
+                    borderRadius: 3,
+                    display: "inline-block",
+                    marginBottom: 3,
+                  }}
+                >
+                  {apiData.responses?.error?.statusCode || 400}
+                </span>
+                {(apiData.responses?.error?.schema || []).map(
+                  (f: OutputField, i: number) => (
+                    <div
+                      key={i}
+                      style={{ fontSize: 10, color: "var(--secondary)" }}
+                    >
+                      {f.name}
+                    </div>
+                  ),
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -547,6 +565,7 @@ export const ApiBindingNode = memo(({ data, selected }: NodeProps) => {
           display: "flex",
           gap: 12,
           fontSize: 10,
+          flexWrap: "wrap",
         }}
       >
         {isRestProtocol && apiData.rateLimit?.enabled && (
@@ -562,6 +581,19 @@ export const ApiBindingNode = memo(({ data, selected }: NodeProps) => {
         {securityType !== "none" && (
           <div style={{ color: "var(--muted)" }}>
             {securityIcons[securityType]} {securityType}
+          </div>
+        )}
+        {isRestProtocol && apiData.cors?.enabled && (
+          <div
+            style={{
+              color: "#4ade80",
+              padding: "1px 4px",
+              background: "rgba(74,222,128,0.1)",
+              border: "1px solid rgba(74,222,128,0.3)",
+              borderRadius: 3,
+            }}
+          >
+            CORS ✓
           </div>
         )}
       </div>

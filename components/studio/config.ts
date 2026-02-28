@@ -418,6 +418,19 @@ export const databaseSections: SidebarSection[] = [
 
 export const functionSections: SidebarSection[] = [
   {
+    id: "functions-start",
+    title: "Start Function",
+    items: [
+      {
+        kind: "function_entry",
+        label: "Start Function",
+        icon: "▶",
+        hoverColor: "#4ade80",
+        hint: "Entry point callable by an API binding",
+      },
+    ],
+  },
+  {
     id: "functions-business-logic",
     title: "Business Logic",
     items: [
