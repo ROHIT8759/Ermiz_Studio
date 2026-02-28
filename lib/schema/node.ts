@@ -116,6 +116,7 @@ export const ProcessStepSchema = z.object({
 // ============================================
 export const ProcessTypeSchema = z.enum([
   "function_block",
+  "start_function",
 ]);
 
 export const ExecutionModeSchema = z.enum([
@@ -1011,6 +1012,14 @@ export const ApiBindingSchema = z.object({
   // Versioning
   version: z.string(),
   deprecated: z.boolean(),
+
+  // CORS Configuration (REST only)
+  cors: z.object({
+    enabled: z.boolean(),
+    origins: z.array(z.string()),
+    methods: z.array(z.string()),
+    credentials: z.boolean(),
+  }).optional(),
 
   // Process Reference
   processRef: z.string(),

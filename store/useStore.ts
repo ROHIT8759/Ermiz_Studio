@@ -41,7 +41,8 @@ export type NodeKind =
   | "infra_s3"
   | "infra_rds"
   | "infra_lb"
-  | "infra_hpc";
+  | "infra_hpc"
+  | "function_entry";
 
 type GraphPreset = "empty" | "hello_world_api";
 
@@ -258,6 +259,7 @@ export const useStore = create<RFState>((set, get) => {
       if (
         activeTab === "functions" &&
         kind !== "process" &&
+        kind !== "function_entry" &&
         kind !== "service_boundary"
       ) {
         return;
@@ -296,6 +298,20 @@ export const useStore = create<RFState>((set, get) => {
             processType: "function_block",
             execution: "sync",
             description: "",
+            inputs: [],
+            outputs: { success: [], error: [] },
+            steps: [],
+          },
+        },
+        function_entry: {
+          type: "process",
+          data: {
+            kind: "process",
+            id: `fn_${Date.now()}`,
+            label: "Start Function",
+            processType: "start_function",
+            execution: "sync",
+            description: "Entry point callable by an API binding",
             inputs: [],
             outputs: { success: [], error: [] },
             steps: [],

@@ -12,18 +12,25 @@ export const ProcessNode = memo(({ data, selected }: NodeProps) => {
     event_driven: "⚡",
   };
 
+  const isStartFunction = processData.processType === "start_function";
+  const headerColor = isStartFunction ? "#4ade80" : "#a78bfa";
+  const headerLabel = isStartFunction ? "▶  Start Function" : "Function Block";
+  const headerBg = isStartFunction
+    ? "color-mix(in srgb, #052e16 80%, var(--floating) 20%)"
+    : "var(--floating)";
+
   return (
     <div
       style={{
         background: "var(--panel)",
         border: selected
-          ? "2px solid var(--primary)"
-          : "1px solid var(--border)",
+          ? `2px solid ${headerColor}`
+          : `1px solid ${isStartFunction ? "rgba(74,222,128,0.35)" : "var(--border)"}`,
         borderRadius: 8,
         minWidth: 280,
         boxShadow: selected
-          ? "0 0 0 2px rgba(124, 108, 255, 0.2)"
-          : "0 4px 12px rgba(0, 0, 0, 0.3)",
+          ? `0 0 0 2px ${isStartFunction ? "rgba(74,222,128,0.2)" : "rgba(124,108,255,0.2)"}`
+          : "0 4px 12px rgba(0,0,0,0.3)",
       }}
     >
       {/* Header */}
@@ -34,7 +41,7 @@ export const ProcessNode = memo(({ data, selected }: NodeProps) => {
           justifyContent: "space-between",
           padding: "8px 12px",
           borderBottom: "1px solid var(--border)",
-          background: "var(--floating)",
+          background: headerBg,
           borderRadius: "8px 8px 0 0",
         }}
       >
@@ -44,11 +51,11 @@ export const ProcessNode = memo(({ data, selected }: NodeProps) => {
               fontSize: 10,
               fontWeight: 600,
               textTransform: "uppercase",
-              color: "#a78bfa",
+              color: headerColor,
               letterSpacing: "0.05em",
             }}
           >
-            Function Block
+            {headerLabel}
           </span>
           <span style={{ fontSize: 10, color: "var(--muted)" }}>
             {executionLabels[processData.execution]}
