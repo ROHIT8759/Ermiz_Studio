@@ -28,9 +28,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!process.env.GEMINI_API) {
+    if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
-        { error: "GEMINI_API not configured" },
+        { error: "GEMINI_API_KEY not configured" },
         { status: 500 },
       );
     }
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       edges: body.edges,
       techStack: body.techStack,
       metadata: body.metadata,
-      apiKey: process.env.GEMINI_API,
+      apiKey: process.env.GEMINI_API_KEY!,
     });
 
     if (!validation?.isValid) {
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       edges: body.edges,
       techStack: body.techStack,
       metadata: body.metadata,
-      apiKey: process.env.GEMINI_API,
+      apiKey: process.env.GEMINI_API_KEY!,
     });
 
     if (!architecturePlan?.files || !Array.isArray(architecturePlan.files)) {
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         filePath: file.path,
         description: file.description,
         fullPlan: architecturePlan,
-        apiKey: process.env.GEMINI_API,
+        apiKey: process.env.GEMINI_API_KEY!,
       });
 
       generatedFiles[file.path] = fileCode;
@@ -173,8 +173,11 @@ ${JSON.stringify(
       };
     }
 
+    // Strip markdown code fences if model wraps JSON
+    const clean = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
+
     // Attempt safe JSON parse
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(clean);
 
     return {
       isValid: Boolean(parsed.isValid),
@@ -267,7 +270,10 @@ ${JSON.stringify(
       throw new Error("Empty architecture plan response");
     }
 
-    const parsed = JSON.parse(text);
+    // Strip markdown code fences if model wraps JSON
+    const clean = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
+
+    const parsed = JSON.parse(clean);
 
     if (!parsed.files || !Array.isArray(parsed.files)) {
       throw new Error("Invalid file structure returned by AI");
