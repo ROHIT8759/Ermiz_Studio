@@ -1,4 +1,4 @@
-# Ermiz Studio
+﻿# Ermiz Studio
 
 Forget about syntax language or framework, design systems that scales and last for decades  
 
@@ -12,7 +12,7 @@ Forget about syntax language or framework, design systems that scales and last f
 
 - Visual backend design platform to model APIs, processes, and infrastructure as explicit specs.
 - Generates canonical OpenAPI / AsyncAPI plus plain JSON for the rest.
-- The editor is a projection of the source files — no hidden logic.
+- The editor is a projection of the source files â€” no hidden logic.
 - Optional AI compilation step that generates code without changing the specs.
 
 ### Tech stack
@@ -41,12 +41,12 @@ Forget about syntax language or framework, design systems that scales and last f
 
 ### API routes (app router)
 
-- `GET /api/credits` — returns refreshed credit balance (applies monthly free grant based on `FREE_RESET_DAY_OF_MONTH`).
-- `POST /api/credits/use` — consume credits; rejects if over balance.
-- `POST /api/payments/dummy` — adds credits via dummy payment.
-- `GET/POST /api/documents` — list or create JSON documents per tab (charges 1 credit on create).
-- `GET/PATCH/DELETE /api/documents/:id` — read/update/delete a document (update charges 1 credit).
-- `GET/POST /api/document-sets` — manage document collections per tab.
+- `GET /api/credits` â€” returns refreshed credit balance (applies monthly free grant based on `FREE_RESET_DAY_OF_MONTH`).
+- `POST /api/credits/use` â€” consume credits; rejects if over balance.
+- `POST /api/payments/dummy` â€” adds credits via dummy payment.
+- `GET/POST /api/documents` â€” list or create JSON documents per tab (charges 1 credit on create).
+- `GET/PATCH/DELETE /api/documents/:id` â€” read/update/delete a document (update charges 1 credit).
+- `GET/POST /api/document-sets` â€” manage document collections per tab.
 
 Auth uses Supabase with Google OAuth. All protected routes are enforced by `middleware.ts`; if the Supabase session cookie is missing/expired, the user is redirected to `/login`.
 
@@ -84,8 +84,8 @@ What you see is what gets built.
 
 ### 1. Designs APIs Correctly
 
-- REST APIs → OpenAPI
-- Event / WebSocket APIs → AsyncAPI
+- REST APIs â†’ OpenAPI
+- Event / WebSocket APIs â†’ AsyncAPI
 
 Each API:
 
@@ -124,7 +124,7 @@ Processes are expressed in **plain JSON**, not code.
 
 ### 3. Models Infrastructure as Capabilities
 
-Databases, queues, and similar systems are **not helpers** — they are **capability boundaries**.
+Databases, queues, and similar systems are **not helpers** â€” they are **capability boundaries**.
 
 Infrastructure blocks declare:
 
@@ -139,7 +139,7 @@ Nothing is implicit.
 
 ### 4. Keeps a Single Source of Truth (Per Concern)
 
-There is no “visual-only” state.
+There is no â€œvisual-onlyâ€ state.
 
 | Concern            | Source of Truth |
 | ------------------ | --------------- |
@@ -168,7 +168,7 @@ AI cannot:
 - Invent architecture
 - Modify definitions silently
 - Bypass declared inputs/outputs
-- Replace specs with “best guesses”
+- Replace specs with â€œbest guessesâ€
 
 You stay in control.
 
@@ -176,7 +176,7 @@ You stay in control.
 
 ## How It Works (High Level)
 
-### Step 1: Choose What You’re Designing
+### Step 1: Choose What Youâ€™re Designing
 
 - API (REST / Event)
 - Process
@@ -188,7 +188,7 @@ This choice **locks the rules**.
 
 ### Step 2: Use a Spec-Aware Canvas
 
-- Nodes available depend on what you’re designing
+- Nodes available depend on what youâ€™re designing
 - Invalid connections are impossible
 - Everything you place maps deterministically to source files
 
@@ -198,9 +198,9 @@ The editor enforces correctness **by construction**.
 
 ### Step 3: Generate Canonical Outputs
 
-- APIs → OpenAPI / AsyncAPI
-- Processes → JSON
-- Infrastructure → JSON
+- APIs â†’ OpenAPI / AsyncAPI
+- Processes â†’ JSON
+- Infrastructure â†’ JSON
 
 All outputs are:
 
@@ -237,13 +237,13 @@ The specs and JSON remain the authority.
 
 ## What This Is NOT
 
-- ❌ A low-code platform
-- ❌ A diagramming tool
-- ❌ A visual scripting language
-- ❌ An OpenAPI replacement
-- ❌ An AI-first system
+- âŒ A low-code platform
+- âŒ A diagramming tool
+- âŒ A visual scripting language
+- âŒ An OpenAPI replacement
+- âŒ An AI-first system
 
-If it hides structure, it’s out of scope.
+If it hides structure, itâ€™s out of scope.
 
 ---
 
@@ -262,7 +262,7 @@ If it hides structure, it’s out of scope.
 
 - Backend engineers who want **clarity before code**
 - Teams that care about **long-term maintainability**
-- Developers who like AI but **don’t trust it blindly**
+- Developers who like AI but **donâ€™t trust it blindly**
 - Anyone tired of undocumented backend behavior
 
 ---
@@ -271,8 +271,8 @@ If it hides structure, it’s out of scope.
 
 Most backend tools fail in one of two ways:
 
-1. Too abstract → not real
-2. Too manual → too slow
+1. Too abstract â†’ not real
+2. Too manual â†’ too slow
 
 This tool sits in between:
 
@@ -314,5 +314,61 @@ If this ever becomes:
 
 Then it has failed.
 
-#   E r m i z _ S t u d i o  
- 
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- pnpm (or npm)
+- A [Supabase](https://supabase.com) project with Google OAuth enabled
+- A PostgreSQL database (Supabase provides one — no separate DB needed)
+
+### 1. Clone & install
+
+```bash
+git clone https://github.com/ROHIT8759/Ermiz_Studio.git
+cd Ermiz_Studio
+pnpm install
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+# Fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+# SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL, and DIRECT_URL
+```
+
+Set `http://localhost:3000/auth/callback` as an allowed redirect URL in your
+Supabase project's **Authentication  URL Configuration**.
+
+### 3. Migrate the database
+
+```bash
+pnpm run prisma:migrate -- --name init
+```
+
+### 4. Run locally
+
+```bash
+pnpm run dev
+# Open http://localhost:3000
+```
+
+---
+
+## Deployment
+
+### Vercel (recommended)
+
+1. Push to GitHub and import the repository in [Vercel](https://vercel.com).
+2. Add all variables from `.env.example` in the Vercel project settings.
+3. Add your Vercel production URL to Supabase's allowed redirect URLs.
+4. Deploy — `pnpm run build` runs automatically.
+
+### Database migrations on deploy
+
+Run `pnpm run prisma:migrate -- --name <change>` locally before pushing, or
+integrate `prisma migrate deploy` into your CI pipeline.
