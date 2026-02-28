@@ -75,6 +75,68 @@ const sectionStyle: React.CSSProperties = {
   marginTop: 8,
 };
 
+const CODE_SNIPPETS: { label: string; title: string; code: string }[] = [
+  {
+    label: "fetch",
+    title: "Async HTTP fetch with error handling",
+    code: `const response = await fetch(url, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+});
+if (!response.ok) throw new Error(\`HTTP \${response.status}\`);
+const data = await response.json();`,
+  },
+  {
+    label: "try/catch",
+    title: "Try/catch returning a structured error",
+    code: `try {
+  // your code
+} catch (err) {
+  const message = err instanceof Error ? err.message : "Unknown error";
+  return { success: false, error: message };
+}`,
+  },
+  {
+    label: "return ok",
+    title: "Return a success result",
+    code: `return { success: true, data: result };`,
+  },
+  {
+    label: "return err",
+    title: "Return an error result",
+    code: `return { success: false, error: "Something went wrong" };`,
+  },
+  {
+    label: "validate",
+    title: "Zod schema validation with early return",
+    code: `const schema = z.object({
+  field: z.string().min(1),
+});
+const parsed = schema.safeParse(inputs);
+if (!parsed.success) return { success: false, error: parsed.error.format() };
+const { field } = parsed.data;`,
+  },
+  {
+    label: "env var",
+    title: "Read an environment variable",
+    code: `const value = process.env.MY_ENV_VAR ?? "";`,
+  },
+  {
+    label: "log",
+    title: "Debug log with JSON formatting",
+    code: `console.log(JSON.stringify({ tag: "debug", data: inputs }, null, 2));`,
+  },
+  {
+    label: "map array",
+    title: "Transform an array with map",
+    code: `const result = items.map((item) => ({
+  ...item,
+  // transformed fields
+}));`,
+  },
+];
+
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((item) => stableStringify(item)).join(",")}]`;
@@ -339,6 +401,13 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     "body",
   );
   const [newDepName, setNewDepName] = useState("");
+  const [logicCopied, setLogicCopied] = useState(false);
+  const [isEditorExpanded, setIsEditorExpanded] = useState(false);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [wrapLines, setWrapLines] = useState(false);
+  const [snippetOpen, setSnippetOpen] = useState(false);
+  const [newErrorOutputName, setNewErrorOutputName] = useState("");
 
   const selectedNode = nodes.find((n) => n.selected);
 
@@ -721,6 +790,21 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
   const funcLogicValue = processNodeForLogic?.logic ?? funcDefaultTemplate;
   const funcLineCount = funcLogicValue.split("\n").length;
 
+  const insertSnippet = (code: string) => {
+    const ta = editorTextareaRef.current;
+    if (!ta) {
+      handleUpdate({ logic: funcLogicValue + "\n" + code } as Partial<ProcessDefinition>);
+      return;
+    }
+    const { selectionStart, selectionEnd } = ta;
+    const next =
+      funcLogicValue.slice(0, selectionStart) + code + funcLogicValue.slice(selectionEnd);
+    handleUpdate({ logic: next } as Partial<ProcessDefinition>);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = selectionStart + code.length;
+    });
+  };
 
   return (
     <aside className="sidebar-scroll" style={panelStyle}>
@@ -799,6 +883,99 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
               <option value="event_driven">Event Driven</option>
             </select>
           </div>
+
+          {/* Scheduled: cron expression */}
+          {(nodeData as ProcessDefinition).execution === "scheduled" && (
+            <div>
+              <div style={labelStyle}>Cron Schedule</div>
+              <input
+                type="text"
+                value={(nodeData as ProcessDefinition).schedule ?? ""}
+                onChange={(e) =>
+                  handleUpdate({ schedule: e.target.value } as Partial<ProcessDefinition>)
+                }
+                placeholder="0 * * * *"
+                style={{ ...inputStyle, fontFamily: "monospace" }}
+              />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                {[
+                  { label: "Every min", value: "* * * * *" },
+                  { label: "Hourly", value: "0 * * * *" },
+                  { label: "Daily", value: "0 0 * * *" },
+                  { label: "Weekly", value: "0 0 * * 0" },
+                  { label: "Monthly", value: "0 0 1 * *" },
+                ].map((preset) => {
+                  const isActive = (nodeData as ProcessDefinition).schedule === preset.value;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() =>
+                        handleUpdate({ schedule: preset.value } as Partial<ProcessDefinition>)
+                      }
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: isActive
+                          ? "color-mix(in srgb, var(--primary) 18%, var(--floating) 82%)"
+                          : "var(--floating)",
+                        color: isActive ? "var(--primary)" : "var(--muted)",
+                        borderRadius: 5,
+                        padding: "3px 7px",
+                        fontSize: 10,
+                        cursor: "pointer",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
+                Standard cron format: minute hour day month weekday
+              </div>
+            </div>
+          )}
+
+          {/* Event-driven: queue + event name */}
+          {(nodeData as ProcessDefinition).execution === "event_driven" && (
+            <div style={{ display: "grid", gap: 8 }}>
+              <div>
+                <div style={labelStyle}>Queue Ref</div>
+                <input
+                  type="text"
+                  value={(nodeData as ProcessDefinition).trigger?.queue ?? ""}
+                  onChange={(e) =>
+                    handleUpdate({
+                      trigger: {
+                        ...(nodeData as ProcessDefinition).trigger,
+                        queue: e.target.value,
+                      },
+                    } as Partial<ProcessDefinition>)
+                  }
+                  placeholder="my-queue-name"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <div style={labelStyle}>Event Name</div>
+                <input
+                  type="text"
+                  value={(nodeData as ProcessDefinition).trigger?.event ?? ""}
+                  onChange={(e) =>
+                    handleUpdate({
+                      trigger: {
+                        ...(nodeData as ProcessDefinition).trigger,
+                        event: e.target.value,
+                      },
+                    } as Partial<ProcessDefinition>)
+                  }
+                  placeholder="user.created"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+          )}
 
           {activeTab === "api" && (
             <div style={sectionStyle}>
@@ -1045,6 +1222,94 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
             </div>
           </div>
 
+          {/* Error Outputs Section */}
+          <div style={sectionStyle}>
+            <div
+              style={{
+                ...labelStyle,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span>Error Outputs</span>
+              <span style={{ color: "var(--destructive)" }}>
+                {(nodeData as ProcessDefinition).outputs.error.length}
+              </span>
+            </div>
+
+            {(nodeData as ProcessDefinition).outputs.error.map(
+              (output: OutputField, i: number) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "4px 8px",
+                    background: "var(--background)",
+                    borderRadius: 4,
+                    marginBottom: 4,
+                    fontSize: 11,
+                    borderLeft: "2px solid var(--destructive)",
+                  }}
+                >
+                  <div>
+                    <span style={{ color: "var(--foreground)" }}>{output.name}</span>
+                    <span style={{ color: "var(--muted)", marginLeft: 6 }}>
+                      : {output.type}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => removeOutput(selectedNode.id, output.name, "error")}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--muted)",
+                      cursor: "pointer",
+                      fontSize: 14,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ),
+            )}
+
+            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+              <input
+                type="text"
+                placeholder="error output name"
+                value={newErrorOutputName}
+                onChange={(e) => setNewErrorOutputName(e.target.value)}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                onClick={() => {
+                  if (newErrorOutputName.trim()) {
+                    addOutput(
+                      selectedNode.id,
+                      { name: newErrorOutputName.trim(), type: "string" },
+                      "error",
+                    );
+                    setNewErrorOutputName("");
+                  }
+                }}
+                style={{
+                  background: "color-mix(in srgb, var(--destructive) 55%, var(--floating) 45%)",
+                  border: "none",
+                  borderRadius: 4,
+                  padding: "6px 12px",
+                  color: "white",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
           {/* Steps Preview */}
           <div style={sectionStyle}>
             <div
@@ -1075,11 +1340,51 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
           {/* Function Logic Editor — shown on Functions tab */}
           {activeTab === "functions" && (
             <>
+              {/* Function Signature Preview */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 6 }}>Function Signature</div>
+                <div
+                  style={{
+                    fontFamily: "'Fira Code', 'Cascadia Code', monospace",
+                    fontSize: 11,
+                    background: "#0d1117",
+                    color: "#a5d6ff",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    padding: "7px 10px",
+                    overflowX: "auto",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span style={{ color: "#ff7b72" }}>async</span>{" "}
+                  <span style={{ color: "#d2a8ff" }}>function</span>{" "}
+                  <span style={{ color: "#79c0ff" }}>{processNodeForLogic?.id}</span>
+                  <span style={{ color: "#e6edf3" }}>(</span>
+                  {funcInputNames.length > 0 ? (
+                    <>
+                      <span style={{ color: "#e6edf3" }}>{"{ "}</span>
+                      {funcInputNames.map((name, i) => (
+                        <span key={name}>
+                          <span style={{ color: "#ffa657" }}>{name}</span>
+                          {i < funcInputNames.length - 1 && (
+                            <span style={{ color: "#e6edf3" }}>{", "}</span>
+                          )}
+                        </span>
+                      ))}
+                      <span style={{ color: "#e6edf3" }}>{" }"}</span>
+                    </>
+                  ) : (
+                    <span style={{ color: "#ffa657" }}>inputs</span>
+                  )}
+                  <span style={{ color: "#e6edf3" }}>)</span>
+                </div>
+              </div>
+
               {/* Available Inputs */}
               {funcInputNames.length > 0 && (
-                <div style={sectionStyle}>
-                  <div style={{ ...labelStyle, marginBottom: 8 }}>Available Inputs</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                <div>
+                  <div style={{ ...labelStyle, marginBottom: 6 }}>Available Inputs</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
                     {funcInputNames.map((name) => (
                       <span
                         key={name}
@@ -1098,71 +1403,137 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     ))}
                   </div>
                   <div style={{ fontSize: 10, color: "var(--muted)", lineHeight: 1.5 }}>
-                    Access via{" "}
-                    <code
-                      style={{
-                        fontFamily: "monospace",
-                        background: "var(--background)",
-                        padding: "1px 4px",
-                        borderRadius: 3,
-                        fontSize: 10,
-                      }}
-                    >
-                      inputs
-                    </code>{" "}
-                    parameter in the function body.
+                    Available as destructured parameters in the function body.
                   </div>
                 </div>
               )}
 
               {/* Code Editor */}
               <div style={sectionStyle}>
+                {/* Editor toolbar */}
                 <div
                   style={{
-                    ...labelStyle,
                     display: "flex",
-                    justifyContent: "space-between",
                     alignItems: "center",
-                    marginBottom: 8,
+                    justifyContent: "space-between",
+                    marginBottom: snippetOpen ? 6 : 6,
                   }}
                 >
-                  <span>Function Logic</span>
-                  <span
+                  <span style={{ ...labelStyle, marginBottom: 0 }}>Function Logic</span>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "var(--muted)",
+                        fontFamily: "monospace",
+                        background: "var(--background)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 4,
+                        padding: "2px 6px",
+                      }}
+                    >
+                      TypeScript
+                    </span>
+                    <button
+                      type="button"
+                      title={snippetOpen ? "Close snippets" : "Insert a code snippet"}
+                      onClick={() => setSnippetOpen((prev) => !prev)}
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: snippetOpen
+                          ? "color-mix(in srgb, var(--primary) 18%, var(--floating) 82%)"
+                          : "var(--floating)",
+                        color: snippetOpen ? "var(--primary)" : "var(--muted)",
+                        borderRadius: 4,
+                        padding: "2px 7px",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      ⚡ Snippets
+                    </button>
+                    <button
+                      type="button"
+                      title={wrapLines ? "Disable word wrap" : "Enable word wrap"}
+                      onClick={() => setWrapLines((prev) => !prev)}
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: wrapLines
+                          ? "color-mix(in srgb, var(--primary) 14%, var(--floating) 86%)"
+                          : "var(--floating)",
+                        color: wrapLines ? "var(--primary)" : "var(--muted)",
+                        borderRadius: 4,
+                        padding: "2px 7px",
+                        fontSize: 12,
+                        cursor: "pointer",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      ↩
+                    </button>
+                    <button
+                      type="button"
+                      title={isEditorExpanded ? "Collapse editor" : "Expand editor"}
+                      onClick={() => setIsEditorExpanded((prev) => !prev)}
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: "var(--floating)",
+                        color: "var(--muted)",
+                        borderRadius: 4,
+                        padding: "2px 7px",
+                        fontSize: 12,
+                        cursor: "pointer",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {isEditorExpanded ? "↙" : "↗"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Snippet picker */}
+                {snippetOpen && (
+                  <div
                     style={{
-                      fontSize: 10,
-                      color: "var(--muted)",
-                      fontFamily: "monospace",
-                      background: "var(--background)",
                       border: "1px solid var(--border)",
-                      borderRadius: 4,
-                      padding: "2px 6px",
-                    }}
-                  >
-                    TypeScript
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "var(--muted)",
-                    marginBottom: 8,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Write the implementation body. Use{" "}
-                  <code
-                    style={{
-                      fontFamily: "monospace",
+                      borderRadius: 8,
                       background: "var(--background)",
-                      padding: "1px 4px",
-                      borderRadius: 3,
-                      fontSize: 10,
+                      padding: 8,
+                      marginBottom: 8,
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 5,
                     }}
                   >
-                    inputs
-                  </code>{" "}
-                  to access parameters and return a value.
-                </div>
+                    {CODE_SNIPPETS.map((snippet) => (
+                      <button
+                        key={snippet.label}
+                        type="button"
+                        title={snippet.title}
+                        onClick={() => {
+                          insertSnippet(snippet.code);
+                          setSnippetOpen(false);
+                        }}
+                        style={{
+                          border: "1px solid var(--border)",
+                          background: "var(--floating)",
+                          color: "var(--secondary)",
+                          borderRadius: 5,
+                          padding: "4px 9px",
+                          fontSize: 11,
+                          fontFamily: "monospace",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {snippet.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Editor container */}
                 <div
                   style={{
                     position: "relative",
@@ -1172,8 +1543,9 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     background: "#0d1117",
                   }}
                 >
-                  {/* line number gutter — real numbers */}
+                  {/* Scroll-synced line number gutter */}
                   <div
+                    ref={gutterRef}
                     style={{
                       position: "absolute",
                       top: 0,
@@ -1185,7 +1557,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                       pointerEvents: "none",
                       zIndex: 1,
                       paddingTop: 10,
-                      overflow: "hidden",
+                      overflowY: "hidden",
                       userSelect: "none",
                     }}
                   >
@@ -1206,14 +1578,51 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     ))}
                   </div>
                   <textarea
+                    ref={editorTextareaRef}
                     value={funcLogicValue}
                     onChange={(e) =>
                       handleUpdate({ logic: e.target.value } as Partial<ProcessDefinition>)
                     }
+                    onKeyDown={(e) => {
+                      const ta = e.currentTarget;
+                      const { selectionStart, selectionEnd, value } = ta;
+                      if (e.key === "Tab") {
+                        e.preventDefault();
+                        const indent = "  ";
+                        const next =
+                          value.slice(0, selectionStart) + indent + value.slice(selectionEnd);
+                        handleUpdate({ logic: next } as Partial<ProcessDefinition>);
+                        requestAnimationFrame(() => {
+                          ta.selectionStart = ta.selectionEnd = selectionStart + indent.length;
+                        });
+                        return;
+                      }
+                      const pairs: Record<string, string> = {
+                        "{": "}", "(": ")", "[": "]", '"': '"', "'": "'", "`": "`",
+                      };
+                      if (pairs[e.key] && selectionStart === selectionEnd) {
+                        e.preventDefault();
+                        const closing = pairs[e.key];
+                        const next =
+                          value.slice(0, selectionStart) +
+                          e.key +
+                          closing +
+                          value.slice(selectionEnd);
+                        handleUpdate({ logic: next } as Partial<ProcessDefinition>);
+                        requestAnimationFrame(() => {
+                          ta.selectionStart = ta.selectionEnd = selectionStart + 1;
+                        });
+                      }
+                    }}
+                    onScroll={(e) => {
+                      if (gutterRef.current) {
+                        gutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                      }
+                    }}
                     spellCheck={false}
                     style={{
                       width: "100%",
-                      minHeight: 220,
+                      minHeight: isEditorExpanded ? 420 : 220,
                       resize: "vertical",
                       background: "transparent",
                       color: "#e6edf3",
@@ -1225,12 +1634,14 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                       border: "none",
                       outline: "none",
                       caretColor: "#79c0ff",
-                      whiteSpace: "pre",
-                      overflowWrap: "normal",
-                      overflowX: "auto",
+                      whiteSpace: wrapLines ? "pre-wrap" : "pre",
+                      overflowWrap: wrapLines ? "break-word" : "normal",
+                      overflowX: wrapLines ? "hidden" : "auto",
                     }}
                   />
                 </div>
+
+                {/* Editor footer actions */}
                 <div
                   style={{
                     display: "flex",
@@ -1260,20 +1671,25 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      navigator.clipboard.writeText(funcLogicValue).catch(() => { })
-                    }
+                    onClick={() => {
+                      navigator.clipboard.writeText(funcLogicValue).catch(() => {});
+                      setLogicCopied(true);
+                      setTimeout(() => setLogicCopied(false), 1500);
+                    }}
                     style={{
                       border: "1px solid var(--border)",
-                      background: "var(--floating)",
-                      color: "var(--secondary)",
+                      background: logicCopied
+                        ? "color-mix(in srgb, #4ade80 18%, var(--floating) 82%)"
+                        : "var(--floating)",
+                      color: logicCopied ? "#4ade80" : "var(--secondary)",
                       borderRadius: 6,
                       padding: "5px 10px",
                       fontSize: 11,
                       cursor: "pointer",
+                      transition: "background 0.2s ease, color 0.2s ease",
                     }}
                   >
-                    Copy
+                    {logicCopied ? "Copied!" : "Copy"}
                   </button>
                 </div>
               </div>
