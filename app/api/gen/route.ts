@@ -15,6 +15,16 @@ class QuotaExceededError extends Error {
   }
 }
 
+/**
+ * Parse GEMINI_API_KEY env var as a comma-separated list of keys.
+ * Supports multiple keys for quota rotation (when one key is exhausted,
+ * the next is tried automatically).
+ */
+function getApiKeys(): string[] {
+  const raw = process.env.GEMINI_API_KEY || "";
+  return raw.split(",").map((k) => k.trim()).filter(Boolean);
+}
+
 function getQuotaRetryAfter(error: unknown): number | null {
   const msg = error instanceof Error ? error.message : String(error);
   const hasQuotaMarker =
@@ -79,12 +89,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    const apiKeys = getApiKeys();
+    if (apiKeys.length === 0) {
       return NextResponse.json(
         { error: "GEMINI_API_KEY not configured" },
         { status: 500 },
       );
     }
+
+    // Track which keys are quota-exhausted during this request so
+    // parallel genCodeAi calls skip already-dead keys immediately.
+    const exhaustedKeys = new Set<number>();
 
     // 1) Plan architecture
     let geminiCallCount = 0;
@@ -93,7 +108,8 @@ export async function POST(req: NextRequest) {
       edges: body.edges,
       techStack: body.techStack,
       metadata: body.metadata,
-      apiKey: process.env.GEMINI_API_KEY!,
+      apiKeys,
+      exhaustedKeys,
       onRequest: () => { geminiCallCount++; },
     });
 
@@ -112,7 +128,8 @@ export async function POST(req: NextRequest) {
           filePath: file.path,
           description: file.description,
           fullPlan: architecturePlan,
-          apiKey: process.env.GEMINI_API_KEY!,
+          apiKeys,
+          exhaustedKeys,
           onRequest: () => { geminiCallCount++; },
         });
         return [file.path, code] as const;
@@ -135,6 +152,7 @@ export async function POST(req: NextRequest) {
         "Content-Disposition": 'attachment; filename="generated-project.zip"',
         "X-Gemini-Requests": String(geminiCallCount),
         "X-Generated-Files": String(filesToGenerate.length),
+        "X-Gemini-Keys": `${apiKeys.length - exhaustedKeys.size}/${apiKeys.length}`,
       },
     });
   } catch (error: unknown) {
@@ -167,19 +185,15 @@ async function planArchitectureAi(input: {
   edges: unknown[];
   techStack?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
-  apiKey: string;
+  apiKeys: string[];
+  exhaustedKeys: Set<number>;
   onRequest?: () => void;
 }): Promise<{
   projectName: string;
   description: string;
   files: { path: string; description: string }[];
 }> {
-  try {
-    const ai = new GoogleGenAI({
-      apiKey: input.apiKey,
-    });
-
-    const prompt = `
+  const prompt = `
 You are a senior software architect.
 
 Your task:
@@ -229,41 +243,55 @@ ${JSON.stringify(
 )}
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-    input.onRequest?.();
+  // Try each API key in order, skipping already-exhausted ones
+  for (let i = 0; i < input.apiKeys.length; i++) {
+    if (input.exhaustedKeys.has(i)) continue;
 
-    const text = response.text?.trim();
+    try {
+      const ai = new GoogleGenAI({ apiKey: input.apiKeys[i] });
 
-    if (!text) {
-      throw new Error("Empty architecture plan response");
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: prompt,
+      });
+      input.onRequest?.();
+
+      const text = response.text?.trim();
+
+      if (!text) {
+        throw new Error("Empty architecture plan response");
+      }
+
+      // Strip markdown code fences if model wraps JSON
+      const clean = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
+
+      const parsed = JSON.parse(clean);
+
+      if (!parsed.files || !Array.isArray(parsed.files)) {
+        throw new Error("Invalid file structure returned by AI");
+      }
+
+      return {
+        projectName: parsed.projectName || "generated-project",
+        description: parsed.description || "",
+        files: parsed.files,
+      };
+    } catch (error) {
+      const retryAfter = getQuotaRetryAfter(error);
+      if (retryAfter !== null) {
+        console.warn(`PLAN: Key #${i + 1} quota exhausted, trying next...`);
+        input.exhaustedKeys.add(i);
+        continue; // try next key
+      }
+      // Non-quota error — don't retry with another key
+      console.error("PLAN ARCHITECTURE ERROR:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Architecture planning failed: ${msg}`);
     }
-
-    // Strip markdown code fences if model wraps JSON
-    const clean = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
-
-    const parsed = JSON.parse(clean);
-
-    if (!parsed.files || !Array.isArray(parsed.files)) {
-      throw new Error("Invalid file structure returned by AI");
-    }
-
-    return {
-      projectName: parsed.projectName || "generated-project",
-      description: parsed.description || "",
-      files: parsed.files,
-    };
-  } catch (error) {
-    console.error("PLAN ARCHITECTURE ERROR:", error);
-    const retryAfter = getQuotaRetryAfter(error);
-    if (retryAfter !== null) {
-      throw new QuotaExceededError(retryAfter);
-    }
-    const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Architecture planning failed: ${msg}`);
   }
+
+  // All keys exhausted
+  throw new QuotaExceededError(60);
 }
 
 async function genCodeAi(input: {
@@ -274,15 +302,11 @@ async function genCodeAi(input: {
     description: string;
     files: { path: string; description: string }[];
   };
-  apiKey: string;
+  apiKeys: string[];
+  exhaustedKeys: Set<number>;
   onRequest?: () => void;
 }): Promise<string> {
-  try {
-    const ai = new GoogleGenAI({
-      apiKey: input.apiKey,
-    });
-
-    const prompt = `
+  const prompt = `
 You are a senior software engineer.
 
 Your task:
@@ -321,29 +345,43 @@ Strict Rules:
 Generate complete code now.
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-    input.onRequest?.();
+  // Try each API key in order, skipping already-exhausted ones
+  for (let i = 0; i < input.apiKeys.length; i++) {
+    if (input.exhaustedKeys.has(i)) continue;
 
-    let text = response.text?.trim();
+    try {
+      const ai = new GoogleGenAI({ apiKey: input.apiKeys[i] });
 
-    if (!text) {
-      throw new Error("Empty code generation response");
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: prompt,
+      });
+      input.onRequest?.();
+
+      let text = response.text?.trim();
+
+      if (!text) {
+        throw new Error("Empty code generation response");
+      }
+
+      // Remove accidental markdown fences if model adds them
+      text = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
+
+      return text;
+    } catch (error) {
+      const retryAfter = getQuotaRetryAfter(error);
+      if (retryAfter !== null) {
+        console.warn(`CODE ${input.filePath}: Key #${i + 1} quota exhausted, trying next...`);
+        input.exhaustedKeys.add(i);
+        continue; // try next key
+      }
+      // Non-quota error — don't retry with another key
+      console.error("CODE GENERATION ERROR:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Code generation failed for ${input.filePath}: ${msg}`);
     }
-
-    // Remove accidental markdown fences if model adds them
-    text = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
-
-    return text;
-  } catch (error) {
-    console.error("CODE GENERATION ERROR:", error);
-    const retryAfter = getQuotaRetryAfter(error);
-    if (retryAfter !== null) {
-      throw new QuotaExceededError(retryAfter);
-    }
-    const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Code generation failed for ${input.filePath}: ${msg}`);
   }
+
+  // All keys exhausted
+  throw new QuotaExceededError(60);
 }

@@ -287,4 +287,53 @@ describe("POST /api/gen", () => {
       expect(call[0].model).toBe("gemini-2.0-flash");
     }
   });
+
+  // ── multi-key rotation ──────────────────────────────────────────────────
+
+  it("rotates to a second API key when the first is quota-exhausted", async () => {
+    process.env.GEMINI_API_KEY = "key-a,key-b";
+
+    // First call (plan with key-a) → quota error
+    // Second call (plan with key-b) → success
+    // Third+ calls (code gen with key-b) → success
+    mockGenerateContent
+      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED: retry in 30s"))
+      .mockResolvedValueOnce(PLAN_RESPONSE)
+      .mockResolvedValue(CODE_RESPONSE("src/index.ts"));
+
+    const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("application/zip");
+
+    // Verify it tried twice for the plan + code calls
+    expect(mockGenerateContent.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("returns 429 only when ALL keys are exhausted", async () => {
+    process.env.GEMINI_API_KEY = "key-a,key-b,key-c";
+
+    // All three keys return quota errors for the plan call
+    mockGenerateContent
+      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED: retry in 10s"))
+      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED: retry in 20s"))
+      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED: retry in 30s"));
+
+    const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toContain("quota");
+  });
+
+  it("reports remaining key count in X-Gemini-Keys header", async () => {
+    process.env.GEMINI_API_KEY = "key-a,key-b";
+
+    mockGenerateContent
+      .mockResolvedValueOnce(PLAN_RESPONSE)
+      .mockResolvedValue({ text: "// code" });
+
+    const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
+    expect(res.status).toBe(200);
+    // Both keys healthy → "2/2"
+    expect(res.headers.get("X-Gemini-Keys")).toBe("2/2");
+  });
 });
