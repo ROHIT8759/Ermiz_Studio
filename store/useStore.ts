@@ -47,11 +47,9 @@ type GraphPreset = "empty" | "hello_world_api";
 
 type WorkspaceTab =
   | "api"
-  | "infra"
   | "database"
   | "functions"
-  | "agent"
-  | "deploy";
+  | "agent";
 
 type GraphState = {
   nodes: Node[];
@@ -178,11 +176,9 @@ const cloneGraph = (graph: GraphState): GraphState => ({
 
 const initialGraphs: Record<WorkspaceTab, GraphState> = {
   api: cloneGraph(graphPresets.hello_world_api),
-  infra: cloneGraph(graphPresets.empty),
   database: cloneGraph(graphPresets.empty),
   functions: cloneGraph(graphPresets.empty),
   agent: cloneGraph(graphPresets.empty),
-  deploy: cloneGraph(graphPresets.empty),
 };
 
 export const useStore = create<RFState>((set, get) => {

@@ -2,19 +2,15 @@ import type { SidebarSection } from "@/components/studio/WorkspaceCanvas";
 
 export type WorkspaceTab =
   | "api"
-  | "infra"
   | "database"
   | "functions"
-  | "agent"
-  | "deploy";
+  | "agent";
 
 export const tabLabel: Record<WorkspaceTab, string> = {
   api: "API",
-  infra: "Infra",
   database: "Database",
   functions: "Functions",
   agent: "Agent",
-  deploy: "Deploy",
 };
 
 export const STORAGE_KEYS = {
@@ -141,7 +137,7 @@ export const apiSections: SidebarSection[] = [
     },
   ];
 
-export const infraSections: SidebarSection[] = [
+const _infraSections: SidebarSection[] = [
     {
       id: "infra-compute",
       title: "Compute",
@@ -456,11 +452,9 @@ export const functionSections: SidebarSection[] = [
 
 export const STATUS_TEXT_BY_TAB: Record<WorkspaceTab, string> = {
   api: "API workspace ready",
-  infra: "Infra workspace ready",
   database: "Database workspace ready",
   functions: "Functions workspace ready",
   agent: "Agent view ready",
-  deploy: "Deploy workspace ready",
 };
 
 export const HEADER_MENU_TEXT = {

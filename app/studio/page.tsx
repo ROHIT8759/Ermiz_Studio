@@ -98,11 +98,9 @@ export default function Home() {
       const savedTab = localStorage.getItem(STORAGE_KEYS.activeTab);
       if (
         savedTab === "api" ||
-        savedTab === "infra" ||
         savedTab === "database" ||
         savedTab === "functions" ||
-        savedTab === "agent" ||
-        savedTab === "deploy"
+        savedTab === "agent"
       ) {
         const frame = window.requestAnimationFrame(() => {
           setActiveTab(savedTab);
