@@ -71,14 +71,7 @@ export function WorkspaceCanvas({
   });
 
   const sidebarItemStyle: React.CSSProperties = {
-    cursor: "pointer",
-    padding: "9px 12px",
-    borderRadius: 10,
-    transition: "all 0.18s ease",
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    border: "1px solid transparent",
+    // base layout — visual states handled by .sidebar-item CSS class
   };
 
   const flatItems = useMemo(
@@ -435,23 +428,11 @@ export function WorkspaceCanvas({
                   {filteredFlatItems.map((item) => (
                     <div
                       key={item.key}
-                      style={{
-                        ...sidebarItemStyle,
-                        color: item.muted ? "var(--muted)" : "var(--secondary)",
-                      }}
+                      className="sidebar-item"
+                      style={{ color: item.muted ? "var(--muted)" : "var(--secondary)" }}
                       onClick={() => addNode(item.kind)}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.background = "var(--floating)";
-                        e.currentTarget.style.color = item.hoverColor;
-                        e.currentTarget.style.borderColor = "var(--border)";
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.background = "transparent";
-                        e.currentTarget.style.color = item.muted
-                          ? "var(--muted)"
-                          : "var(--secondary)";
-                        e.currentTarget.style.borderColor = "transparent";
-                      }}
+                      onMouseOver={(e) => { e.currentTarget.style.color = item.hoverColor; }}
+                      onMouseOut={(e) => { e.currentTarget.style.color = item.muted ? "var(--muted)" : "var(--secondary)"; }}
                     >
                       <span style={{ fontSize: 12 }}>{item.icon}</span>
                       <span
@@ -550,25 +531,11 @@ export function WorkspaceCanvas({
                       {section.items.map((item, index) => (
                         <div
                           key={`${section.id}-${item.kind}-${item.label}-${index}`}
-                          style={{
-                            ...sidebarItemStyle,
-                            color: section.muted
-                              ? "var(--muted)"
-                              : "var(--secondary)",
-                          }}
+                          className="sidebar-item"
+                          style={{ color: section.muted ? "var(--muted)" : "var(--secondary)" }}
                           onClick={() => addNode(item.kind)}
-                          onMouseOver={(e) => {
-                            e.currentTarget.style.background = "var(--floating)";
-                            e.currentTarget.style.color = item.hoverColor;
-                            e.currentTarget.style.borderColor = "var(--border)";
-                          }}
-                          onMouseOut={(e) => {
-                            e.currentTarget.style.background = "transparent";
-                            e.currentTarget.style.color = section.muted
-                              ? "var(--muted)"
-                              : "var(--secondary)";
-                            e.currentTarget.style.borderColor = "transparent";
-                          }}
+                          onMouseOver={(e) => { e.currentTarget.style.color = item.hoverColor; }}
+                          onMouseOut={(e) => { e.currentTarget.style.color = section.muted ? "var(--muted)" : "var(--secondary)"; }}
                         >
                           <span style={{ fontSize: 12 }}>{item.icon}</span>
                           <span

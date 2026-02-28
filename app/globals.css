@@ -421,3 +421,38 @@ aside {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
+
+/* ============================================
+   Sidebar Item Hover
+   ============================================ */
+
+.sidebar-item {
+  cursor: pointer;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--secondary);
+  background: transparent;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+  will-change: transform;
+}
+
+.sidebar-item:hover {
+  background: var(--floating);
+  border-color: var(--border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.sidebar-item:active {
+  transform: translateY(0px);
+  box-shadow: none;
+}
