@@ -1046,76 +1046,76 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
               {/* Retry Policy — async / event_driven only */}
               {((nodeData as ProcessDefinition).execution === "async" ||
                 (nodeData as ProcessDefinition).execution === "event_driven") && (
-                <div>
-                  <div style={{ ...labelStyle, marginBottom: 6 }}>Retry Policy</div>
-                  <div style={{ display: "grid", gap: 5 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
-                        Max Attempts
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={(nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3}
-                        onChange={(e) =>
-                          handleUpdate({
-                            retryPolicy: {
-                              maxAttempts: Number(e.target.value),
-                              backoff: (nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear",
-                              delayMs: (nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000,
-                            },
-                          } as Partial<ProcessDefinition>)
-                        }
-                        style={{ ...inputStyle, width: 64 }}
-                      />
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
-                        Backoff
-                      </span>
-                      <select
-                        value={(nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear"}
-                        onChange={(e) =>
-                          handleUpdate({
-                            retryPolicy: {
-                              maxAttempts: (nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3,
-                              backoff: e.target.value as "fixed" | "linear" | "exponential",
-                              delayMs: (nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000,
-                            },
-                          } as Partial<ProcessDefinition>)
-                        }
-                        style={{ ...selectStyle, flex: 1 }}
-                      >
-                        <option value="fixed">Fixed</option>
-                        <option value="linear">Linear</option>
-                        <option value="exponential">Exponential</option>
-                      </select>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
-                        Initial Delay
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={(nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000}
-                        onChange={(e) =>
-                          handleUpdate({
-                            retryPolicy: {
-                              maxAttempts: (nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3,
-                              backoff: (nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear",
-                              delayMs: Number(e.target.value),
-                            },
-                          } as Partial<ProcessDefinition>)
-                        }
-                        style={{ ...inputStyle, width: 72 }}
-                      />
-                      <span style={{ fontSize: 11, color: "var(--muted)" }}>ms</span>
+                  <div>
+                    <div style={{ ...labelStyle, marginBottom: 6 }}>Retry Policy</div>
+                    <div style={{ display: "grid", gap: 5 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
+                          Max Attempts
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={(nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3}
+                          onChange={(e) =>
+                            handleUpdate({
+                              retryPolicy: {
+                                maxAttempts: Number(e.target.value),
+                                backoff: (nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear",
+                                delayMs: (nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000,
+                              },
+                            } as Partial<ProcessDefinition>)
+                          }
+                          style={{ ...inputStyle, width: 64 }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
+                          Backoff
+                        </span>
+                        <select
+                          value={(nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear"}
+                          onChange={(e) =>
+                            handleUpdate({
+                              retryPolicy: {
+                                maxAttempts: (nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3,
+                                backoff: e.target.value as "fixed" | "linear" | "exponential",
+                                delayMs: (nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000,
+                              },
+                            } as Partial<ProcessDefinition>)
+                          }
+                          style={{ ...selectStyle, flex: 1 }}
+                        >
+                          <option value="fixed">Fixed</option>
+                          <option value="linear">Linear</option>
+                          <option value="exponential">Exponential</option>
+                        </select>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 10, color: "var(--muted)", width: 88, flexShrink: 0 }}>
+                          Initial Delay
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={(nodeData as ProcessDefinition).retryPolicy?.delayMs ?? 1000}
+                          onChange={(e) =>
+                            handleUpdate({
+                              retryPolicy: {
+                                maxAttempts: (nodeData as ProcessDefinition).retryPolicy?.maxAttempts ?? 3,
+                                backoff: (nodeData as ProcessDefinition).retryPolicy?.backoff ?? "linear",
+                                delayMs: Number(e.target.value),
+                              },
+                            } as Partial<ProcessDefinition>)
+                          }
+                          style={{ ...inputStyle, width: 72 }}
+                        />
+                        <span style={{ fontSize: 11, color: "var(--muted)" }}>ms</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Memory & Concurrency */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -2020,7 +2020,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard.writeText(funcLogicValue).catch(() => {});
+                      navigator.clipboard.writeText(funcLogicValue).catch(() => { });
                       setLogicCopied(true);
                       setTimeout(() => setLogicCopied(false), 1500);
                     }}

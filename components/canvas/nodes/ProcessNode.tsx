@@ -207,89 +207,89 @@ export const ProcessNode = memo(({ data, selected }: NodeProps) => {
       {/* Outputs */}
       {(processData.outputs.success.length > 0 ||
         processData.outputs.error.length > 0) && (
-        <div style={{ padding: "8px 12px" }}>
-          <div
-            style={{
-              fontSize: 10,
-              color: "var(--muted)",
-              marginBottom: 6,
-              textTransform: "uppercase",
-            }}
-          >
-            Outputs
+          <div style={{ padding: "8px 12px" }}>
+            <div
+              style={{
+                fontSize: 10,
+                color: "var(--muted)",
+                marginBottom: 6,
+                textTransform: "uppercase",
+              }}
+            >
+              Outputs
+            </div>
+            {processData.outputs.success.map((output: OutputField, i: number) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  fontSize: 11,
+                  marginBottom: 4,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#4ade80", fontSize: 9 }}>✓</span>
+                  <span style={{ color: "var(--secondary)" }}>{output.name}</span>
+                  <span style={{ color: "var(--muted)", fontSize: 10 }}>
+                    : {output.type}
+                  </span>
+                </div>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`output-${output.name}`}
+                  style={{
+                    position: "relative",
+                    right: 0,
+                    top: 0,
+                    transform: "none",
+                    width: 8,
+                    height: 8,
+                    background: "#4ade80",
+                    border: "none",
+                  }}
+                />
+              </div>
+            ))}
+            {processData.outputs.error.map((output: OutputField, i: number) => (
+              <div
+                key={`err-${i}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  fontSize: 11,
+                  marginBottom: 4,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#ef4444", fontSize: 9 }}>✗</span>
+                  <span style={{ color: "var(--secondary)" }}>{output.name}</span>
+                  <span style={{ color: "var(--muted)", fontSize: 10 }}>
+                    : {output.type}
+                  </span>
+                </div>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`error-${output.name}`}
+                  style={{
+                    position: "relative",
+                    right: 0,
+                    top: 0,
+                    transform: "none",
+                    width: 8,
+                    height: 8,
+                    background: "#ef4444",
+                    border: "none",
+                  }}
+                />
+              </div>
+            ))}
           </div>
-          {processData.outputs.success.map((output: OutputField, i: number) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                fontSize: 11,
-                marginBottom: 4,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: "#4ade80", fontSize: 9 }}>✓</span>
-                <span style={{ color: "var(--secondary)" }}>{output.name}</span>
-                <span style={{ color: "var(--muted)", fontSize: 10 }}>
-                  : {output.type}
-                </span>
-              </div>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={`output-${output.name}`}
-                style={{
-                  position: "relative",
-                  right: 0,
-                  top: 0,
-                  transform: "none",
-                  width: 8,
-                  height: 8,
-                  background: "#4ade80",
-                  border: "none",
-                }}
-              />
-            </div>
-          ))}
-          {processData.outputs.error.map((output: OutputField, i: number) => (
-            <div
-              key={`err-${i}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                fontSize: 11,
-                marginBottom: 4,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: "#ef4444", fontSize: 9 }}>✗</span>
-                <span style={{ color: "var(--secondary)" }}>{output.name}</span>
-                <span style={{ color: "var(--muted)", fontSize: 10 }}>
-                  : {output.type}
-                </span>
-              </div>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={`error-${output.name}`}
-                style={{
-                  position: "relative",
-                  right: 0,
-                  top: 0,
-                  transform: "none",
-                  width: 8,
-                  height: 8,
-                  background: "#ef4444",
-                  border: "none",
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+        )}
 
       {/* Default handles if no inputs/outputs */}
       {processData.inputs.length === 0 && (

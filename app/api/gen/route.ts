@@ -35,26 +35,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1️⃣ Validate Design
-    const validation = await validateDesign({
-      nodes: body.nodes,
-      edges: body.edges,
-      techStack: body.techStack,
-      metadata: body.metadata,
-      apiKey: process.env.GEMINI_API_KEY!,
-    });
-
-    if (!validation?.isValid) {
-      return NextResponse.json(
-        {
-          error: "Design is not valid",
-          reason: validation?.reason || "Unknown validation error",
-        },
-        { status: 400 },
-      );
-    }
-
-    // 2️⃣ Plan Architecture
+    // 1️⃣ Plan Architecture
     const architecturePlan = await planArchitectureAi({
       nodes: body.nodes,
       edges: body.edges,
@@ -70,23 +51,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3️⃣ Generate Code File-by-File
-    const generatedFiles: Record<string, string> = {};
+    // 2️⃣ Generate Code Files in parallel (cap at 20 to avoid timeout)
+    const filesToGenerate = architecturePlan.files.slice(0, 20);
+    const generatedEntries = await Promise.all(
+      filesToGenerate.map(async (file) => {
+        const code = await genCodeAi({
+          filePath: file.path,
+          description: file.description,
+          fullPlan: architecturePlan,
+          apiKey: process.env.GEMINI_API_KEY!,
+        });
+        return [file.path, code] as const;
+      }),
+    );
+    const generatedFiles = Object.fromEntries(generatedEntries);
 
-    for (const file of architecturePlan.files) {
-      const fileCode = await genCodeAi({
-        filePath: file.path,
-        description: file.description,
-        fullPlan: architecturePlan,
-        apiKey: process.env.GEMINI_API_KEY!,
-      });
-
-      generatedFiles[file.path] = fileCode;
-    }
-
-    // 4️⃣ Zip All Files
+    // 3️⃣ Zip All Files
     const zip = new JSZip();
-
     Object.entries(generatedFiles).forEach(([filePath, content]) => {
       zip.file(filePath, content);
     });
@@ -102,94 +83,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("GEN ERROR:", error);
-
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", detail: String(error) },
       { status: 500 },
     );
-  }
-}
-
-async function validateDesign(input: {
-  nodes: unknown[];
-  edges: unknown[];
-  techStack?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  apiKey: string;
-}): Promise<{ isValid: boolean; reason?: string }> {
-  try {
-    const ai = new GoogleGenAI({
-      apiKey: input.apiKey,
-    });
-
-    const prompt = `
-You are a senior backend systems architect.
-
-Your task:
-Validate whether the provided backend architecture design is technically feasible and internally consistent.
-
-Consider:
-- Are dependencies logically valid?
-- Are components compatible?
-- Are there impossible architectural constraints?
-- Is the tech stack compatible with the design?
-- Any missing critical components?
-
-Return STRICT JSON only in this format:
-
-{
-  "isValid": boolean,
-  "reason": "Short simple explanation if invalid, otherwise null"
-}
-
-No markdown.
-No explanation outside JSON.
-
-Here is the design:
-
-${JSON.stringify(
-  {
-    nodes: input.nodes,
-    edges: input.edges,
-    techStack: input.techStack,
-    metadata: input.metadata,
-  },
-  null,
-  2,
-)}
-`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
-
-    const text = response.text?.trim();
-
-    if (!text) {
-      return {
-        isValid: false,
-        reason: "AI returned empty validation response",
-      };
-    }
-
-    // Strip markdown code fences if model wraps JSON
-    const clean = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
-
-    // Attempt safe JSON parse
-    const parsed = JSON.parse(clean);
-
-    return {
-      isValid: Boolean(parsed.isValid),
-      reason: parsed.reason || undefined,
-    };
-  } catch (error) {
-    console.error("VALIDATION ERROR:", error);
-
-    return {
-      isValid: false,
-      reason: "Validation process failed",
-    };
   }
 }
 
@@ -260,7 +157,7 @@ ${JSON.stringify(
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro", // stronger reasoning for planning
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
 
@@ -345,7 +242,7 @@ Generate complete code now.
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
 
