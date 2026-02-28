@@ -160,6 +160,10 @@ export const ProcessDefinitionSchema = z.object({
   envVars: z.array(z.object({ key: z.string(), value: z.string() })).optional(),
   tags: z.array(z.string()).optional(),
   returnType: z.string().optional(),
+  notes: z.string().optional(),
+  memoryMb: z.number().int().min(128).optional(),
+  concurrency: z.number().int().min(1).optional(),
+  testInputs: z.record(z.string(), z.string()).optional(),
 });
 
 // ============================================

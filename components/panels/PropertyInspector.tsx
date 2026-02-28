@@ -810,6 +810,30 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     });
   };
 
+  // Connections: edges from/to the selected node in the current tab
+  const incomingConnections = edges
+    .filter((e) => e.target === selectedNode.id)
+    .map((e) => {
+      const src = nodes.find((n) => n.id === e.source);
+      const srcData = src?.data as NodeData | undefined;
+      const label =
+        srcData && "label" in srcData
+          ? (srcData as { label: string }).label
+          : e.source;
+      return { id: e.source, label };
+    });
+  const outgoingConnections = edges
+    .filter((e) => e.source === selectedNode.id)
+    .map((e) => {
+      const tgt = nodes.find((n) => n.id === e.target);
+      const tgtData = tgt?.data as NodeData | undefined;
+      const label =
+        tgtData && "label" in tgtData
+          ? (tgtData as { label: string }).label
+          : e.target;
+      return { id: e.target, label };
+    });
+
   return (
     <aside className="sidebar-scroll" style={panelStyle}>
       {/* Header */}
@@ -1080,6 +1104,40 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   </div>
                 </div>
               )}
+
+              {/* Memory & Concurrency */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={labelStyle}>Memory (MB)</div>
+                  <input
+                    type="number"
+                    min={128}
+                    max={8192}
+                    step={128}
+                    value={(nodeData as ProcessDefinition).memoryMb ?? 256}
+                    onChange={(e) =>
+                      handleUpdate({ memoryMb: Number(e.target.value) } as Partial<ProcessDefinition>)
+                    }
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <div style={labelStyle}>Max Concurrency</div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={(nodeData as ProcessDefinition).concurrency ?? 1}
+                    onChange={(e) =>
+                      handleUpdate({ concurrency: Number(e.target.value) } as Partial<ProcessDefinition>)
+                    }
+                    style={inputStyle}
+                  />
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 3 }}>
+                    parallel instances
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2267,6 +2325,186 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   </button>
                 </div>
               </div>
+
+              {/* Notes / Documentation */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 6 }}>Notes / Documentation</div>
+                <textarea
+                  value={(nodeData as ProcessDefinition).notes ?? ""}
+                  onChange={(e) =>
+                    handleUpdate({ notes: e.target.value } as Partial<ProcessDefinition>)
+                  }
+                  placeholder="Extended documentation, design assumptions, edge cases, references..."
+                  rows={4}
+                  style={{
+                    ...inputStyle,
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                    lineHeight: 1.55,
+                    minHeight: 72,
+                  }}
+                />
+              </div>
+
+              {/* Connections */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 8 }}>Connections</div>
+                {incomingConnections.length === 0 && outgoingConnections.length === 0 ? (
+                  <div style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
+                    No edges connected to this node yet.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {incomingConnections.length > 0 && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "var(--muted)",
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Callers ({incomingConnections.length})
+                        </div>
+                        <div style={{ display: "grid", gap: 3 }}>
+                          {incomingConnections.map((conn) => (
+                            <div
+                              key={conn.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: 11,
+                                color: "var(--secondary)",
+                                background: "var(--floating)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "4px 8px",
+                              }}
+                            >
+                              <span style={{ color: "var(--primary)", fontSize: 10 }}>→</span>
+                              <span
+                                style={{
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {conn.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {outgoingConnections.length > 0 && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "var(--muted)",
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Calls ({outgoingConnections.length})
+                        </div>
+                        <div style={{ display: "grid", gap: 3 }}>
+                          {outgoingConnections.map((conn) => (
+                            <div
+                              key={conn.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: 11,
+                                color: "var(--secondary)",
+                                background: "var(--floating)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "4px 8px",
+                              }}
+                            >
+                              <span style={{ color: "var(--muted)", fontSize: 10 }}>←</span>
+                              <span
+                                style={{
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {conn.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Test Inputs */}
+              {((nodeData as ProcessDefinition).inputs ?? []).length > 0 && (
+                <div style={sectionStyle}>
+                  <div style={{ ...labelStyle, marginBottom: 4 }}>Test Inputs</div>
+                  <div
+                    style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5 }}
+                  >
+                    Mock values for testing. Stored on this block only.
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {((nodeData as ProcessDefinition).inputs ?? []).map((input) => (
+                      <div key={input.name}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            marginBottom: 3,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--secondary)",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {input.name}
+                          </span>
+                          <span style={{ fontSize: 10, color: "var(--muted)" }}>({input.type})</span>
+                          {!input.required && (
+                            <span
+                              style={{
+                                fontSize: 9,
+                                color: "var(--muted)",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              optional
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          value={(nodeData as ProcessDefinition).testInputs?.[input.name] ?? ""}
+                          onChange={(e) => {
+                            const current =
+                              (nodeData as ProcessDefinition).testInputs ?? {};
+                            handleUpdate({
+                              testInputs: { ...current, [input.name]: e.target.value },
+                            } as Partial<ProcessDefinition>);
+                          }}
+                          placeholder={`mock ${input.type} value`}
+                          style={{ ...inputStyle, fontSize: 11 }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </>
@@ -5481,20 +5719,48 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
 
           {/* Function Block Reference */}
           <div style={sectionStyle}>
-            <div style={labelStyle}>Invokes Function Block</div>
-            <input
-              type="text"
-              value={(nodeData as ApiBinding).processRef}
-              onChange={(e) =>
-                handleUpdate({
-                  processRef: e.target.value,
-                } as Partial<ApiBinding>)
-              }
-              placeholder="createUser"
-              style={inputStyle}
-            />
+            <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <span>Invokes Function Block</span>
+              {allFunctionIds.length > 0 && (
+                <span style={{ color: "var(--secondary)", fontSize: 10 }}>
+                  {allFunctionIds.length} available
+                </span>
+              )}
+            </div>
+            {allFunctionIds.length === 0 ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  fontStyle: "italic",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "6px 10px",
+                  background: "var(--floating)",
+                }}
+              >
+                No function blocks found. Add function blocks in the Functions workspace.
+              </div>
+            ) : (
+              <select
+                value={(nodeData as ApiBinding).processRef}
+                onChange={(e) =>
+                  handleUpdate({
+                    processRef: e.target.value,
+                  } as Partial<ApiBinding>)
+                }
+                style={selectStyle}
+              >
+                <option value="">— Select a function block —</option>
+                {allFunctionIds.map((fn) => (
+                  <option key={fn.id} value={fn.id}>
+                    {fn.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
-              Reference to the function block this interface invokes
+              The function block this API interface invokes when called
             </div>
           </div>
         </>
