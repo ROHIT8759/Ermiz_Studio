@@ -16,9 +16,9 @@ export function AgentWorkspace() {
     for (const node of nodes) {
       const kind =
         typeof node.data === "object" &&
-        node.data &&
-        "kind" in node.data &&
-        typeof node.data.kind === "string"
+          node.data &&
+          "kind" in node.data &&
+          typeof node.data.kind === "string"
           ? node.data.kind
           : node.type || "unknown";
       kindCount[kind] = (kindCount[kind] || 0) + 1;
@@ -36,16 +36,16 @@ export function AgentWorkspace() {
         type: node.type,
         kind:
           typeof node.data === "object" &&
-          node.data &&
-          "kind" in node.data &&
-          typeof node.data.kind === "string"
+            node.data &&
+            "kind" in node.data &&
+            typeof node.data.kind === "string"
             ? node.data.kind
             : node.type || "unknown",
         label:
           typeof node.data === "object" &&
-          node.data &&
-          "label" in node.data &&
-          typeof node.data.label === "string"
+            node.data &&
+            "label" in node.data &&
+            typeof node.data.label === "string"
             ? node.data.label
             : node.id,
       })),

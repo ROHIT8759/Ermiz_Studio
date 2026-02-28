@@ -1,0 +1,87 @@
+// Prisma schema for Ermiz backend
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TabKind {
+  api
+  process
+  infrastructure
+  schema
+  requestTab
+  other
+}
+
+model User {
+  id            String            @id @default(cuid())
+  email         String            @unique
+  name          String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  creditBalance CreditBalance?
+  documents     Document[]
+  documentSets  DocumentSet[]
+  transactions  CreditTransaction[]
+}
+
+model CreditBalance {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id])
+  availableCredits    Int      @default(0)
+  monthlyFreeCredits  Int      @default(1000)
+  freeResetDayOfMonth Int      @default(1) // day-of-month when free credits refresh
+  lastResetAt         DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model CreditTransaction {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  kind      TransactionKind
+  amount    Int       // positive for add, negative for consumption
+  note      String?
+  createdAt DateTime  @default(now())
+}
+
+enum TransactionKind {
+  monthly_free_grant
+  manual_topup
+  dummy_payment
+  usage
+  refund
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  tab         TabKind
+  title       String
+  version     Int      @default(1)
+  content     Json
+  metadata    Json?    // per-tab ancillary data
+  documentSetId String?
+  documentSet   DocumentSet? @relation(fields: [documentSetId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model DocumentSet {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  tab         TabKind
+  name        String
+  documents   Document[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
