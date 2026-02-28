@@ -9,6 +9,7 @@ import {
   DatabaseBlock,
   DatabaseEnvironmentsSchema,
   DatabaseRelationshipSchema,
+  DatabaseRelationship,
   DatabaseSchemaHistoryEntry,
   DatabaseSchemaHistoryEntrySchema,
   DatabaseSeedSchema,
@@ -390,6 +391,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [isSchemaDesignerExpanded, setIsSchemaDesignerExpanded] = useState(true);
   const [showERD, setShowERD] = useState(false);
+  const [isRelationshipsExpanded, setIsRelationshipsExpanded] = useState(true);
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     databaseTemplates[0]?.id || "",
   );
@@ -2610,17 +2612,29 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
 
           <div>
             <div style={labelStyle}>Engine</div>
-            <input
-              type="text"
+            <select
               value={(nodeData as DatabaseBlock).engine || ""}
               onChange={(e) =>
                 handleUpdate({
                   engine: e.target.value,
                 } as Partial<DatabaseBlock>)
               }
-              placeholder="postgres, mongodb, redis..."
-              style={inputStyle}
-            />
+              style={selectStyle}
+            >
+              <option value="">Select engine...</option>
+              <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL</option>
+              <option value="mongodb">MongoDB</option>
+              <option value="redis">Redis</option>
+              <option value="sqlite">SQLite</option>
+              <option value="mariadb">MariaDB</option>
+              <option value="mssql">SQL Server</option>
+              <option value="cockroachdb">CockroachDB</option>
+              <option value="dynamodb">DynamoDB</option>
+              <option value="cassandra">Cassandra</option>
+              <option value="neo4j">Neo4j</option>
+              <option value="elasticsearch">Elasticsearch</option>
+            </select>
           </div>
 
           <div style={sectionStyle}>
@@ -2919,10 +2933,17 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                                   style={selectStyle}
                                 >
                                   <option value="string">string</option>
+                                  <option value="text">text</option>
                                   <option value="number">number</option>
+                                  <option value="int">int</option>
+                                  <option value="bigint">bigint</option>
+                                  <option value="float">float</option>
+                                  <option value="decimal">decimal</option>
                                   <option value="boolean">boolean</option>
                                   <option value="date">date</option>
+                                  <option value="datetime">datetime</option>
                                   <option value="json">json</option>
+                                  <option value="uuid">uuid</option>
                                 </select>
                                 <button
                                   type="button"
@@ -3005,6 +3026,20 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                                     }}
                                   />
                                   fk
+                                </label>
+                                <label style={{ fontSize: 11, color: "var(--muted)", display: "flex", gap: 4 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(field.unique)}
+                                    onChange={(e) => {
+                                      const tables = [...((nodeData as DatabaseBlock).tables || [])];
+                                      const fields = [...(tables[tableIndex].fields || [])];
+                                      fields[fieldIndex] = { ...fields[fieldIndex], unique: e.target.checked };
+                                      tables[tableIndex] = { ...tables[tableIndex], fields };
+                                      updateDatabaseTables(tables);
+                                    }}
+                                  />
+                                  unique
                                 </label>
                               </div>
 
@@ -3111,7 +3146,247 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
             )}
           </div>
 
-          <div style={{ ...sectionStyle, display: "none" }}>
+          {/* Relationships Editor */}
+          <div style={sectionStyle}>
+            <button
+              type="button"
+              onClick={() => setIsRelationshipsExpanded((prev) => !prev)}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "var(--muted)",
+                padding: 0,
+                cursor: "pointer",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: isRelationshipsExpanded ? 8 : 0,
+              }}
+            >
+              <span>{isRelationshipsExpanded ? "▾" : "▸"}</span>
+              <span>Relationships</span>
+              <span style={{ fontSize: 9, color: "var(--muted)", opacity: 0.7 }}>
+                ({((nodeData as DatabaseBlock).relationships || []).length})
+              </span>
+            </button>
+
+            {isRelationshipsExpanded && (
+              <div style={{ display: "grid", gap: 8 }}>
+                {((nodeData as DatabaseBlock).relationships || []).length === 0 && (
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                    No relationships defined.
+                  </div>
+                )}
+
+                {((nodeData as DatabaseBlock).relationships || []).map((rel, relIndex) => {
+                  const tables = (nodeData as DatabaseBlock).tables || [];
+                  const fromTable = tables.find((t) => t.id === rel.fromTableId || t.name === rel.fromTableId);
+                  const toTable = tables.find((t) => t.id === rel.toTableId || t.name === rel.toTableId);
+                  const fromFields = fromTable?.fields || [];
+                  const toFields = toTable?.fields || [];
+
+                  return (
+                    <div
+                      key={rel.id || relIndex}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: 6,
+                        padding: 8,
+                        background: "var(--floating)",
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>
+                          #{relIndex + 1}
+                        </span>
+                        <input
+                          value={rel.name || ""}
+                          onChange={(e) => {
+                            const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                            rels[relIndex] = { ...rels[relIndex], name: e.target.value };
+                            handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                          }}
+                          placeholder="Relationship name"
+                          style={{ ...inputStyle, flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rels = ((nodeData as DatabaseBlock).relationships || []).filter(
+                              (_, i) => i !== relIndex,
+                            );
+                            handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                          }}
+                          style={{
+                            border: "1px solid var(--border)",
+                            background: "transparent",
+                            color: "var(--muted)",
+                            borderRadius: 4,
+                            padding: "3px 6px",
+                            fontSize: 11,
+                            cursor: "pointer",
+                          }}
+                        >
+                          x
+                        </button>
+                      </div>
+
+                      <select
+                        value={rel.type}
+                        onChange={(e) => {
+                          const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                          rels[relIndex] = { ...rels[relIndex], type: e.target.value as DatabaseRelationship["type"] };
+                          handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                        }}
+                        style={selectStyle}
+                      >
+                        <option value="one_to_one">One to One</option>
+                        <option value="one_to_many">One to Many</option>
+                        <option value="many_to_many">Many to Many</option>
+                      </select>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 3 }}>From Table</div>
+                          <select
+                            value={rel.fromTableId}
+                            onChange={(e) => {
+                              const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                              rels[relIndex] = { ...rels[relIndex], fromTableId: e.target.value, fromFieldId: "" };
+                              handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                            }}
+                            style={selectStyle}
+                          >
+                            <option value="">Select table...</option>
+                            {tables.map((t, i) => (
+                              <option key={`from-${t.id || t.name}-${i}`} value={t.id || t.name}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 3 }}>To Table</div>
+                          <select
+                            value={rel.toTableId}
+                            onChange={(e) => {
+                              const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                              rels[relIndex] = { ...rels[relIndex], toTableId: e.target.value, toFieldId: "" };
+                              handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                            }}
+                            style={selectStyle}
+                          >
+                            <option value="">Select table...</option>
+                            {tables.map((t, i) => (
+                              <option key={`to-${t.id || t.name}-${i}`} value={t.id || t.name}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 3 }}>From Field</div>
+                          <select
+                            value={rel.fromFieldId || ""}
+                            onChange={(e) => {
+                              const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                              rels[relIndex] = { ...rels[relIndex], fromFieldId: e.target.value || undefined };
+                              handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                            }}
+                            style={selectStyle}
+                          >
+                            <option value="">Select field...</option>
+                            {fromFields.map((f, i) => (
+                              <option key={`ff-${f.id || f.name}-${i}`} value={f.id || f.name}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 3 }}>To Field</div>
+                          <select
+                            value={rel.toFieldId || ""}
+                            onChange={(e) => {
+                              const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                              rels[relIndex] = { ...rels[relIndex], toFieldId: e.target.value || undefined };
+                              handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                            }}
+                            style={selectStyle}
+                          >
+                            <option value="">Select field...</option>
+                            {toFields.map((f, i) => (
+                              <option key={`tf-${f.id || f.name}-${i}`} value={f.id || f.name}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 3 }}>On Delete</div>
+                        <select
+                          value={rel.onDelete || "no_action"}
+                          onChange={(e) => {
+                            const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                            rels[relIndex] = { ...rels[relIndex], onDelete: e.target.value as DatabaseRelationship["onDelete"] };
+                            handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                          }}
+                          style={selectStyle}
+                        >
+                          <option value="no_action">No Action</option>
+                          <option value="cascade">Cascade</option>
+                          <option value="restrict">Restrict</option>
+                          <option value="set_null">Set Null</option>
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rels = [...((nodeData as DatabaseBlock).relationships || [])];
+                    rels.push({
+                      id: `rel_${Date.now()}`,
+                      name: "",
+                      type: "one_to_many",
+                      fromTableId: "",
+                      toTableId: "",
+                      fromFieldId: "",
+                      toFieldId: "",
+                      onDelete: "no_action",
+                    });
+                    handleUpdate({ relationships: rels } as Partial<DatabaseBlock>);
+                  }}
+                  style={{
+                    border: "1px solid var(--border)",
+                    background: "var(--floating)",
+                    color: "var(--foreground)",
+                    borderRadius: 4,
+                    padding: "4px 8px",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    width: "fit-content",
+                  }}
+                >
+                  + Relationship
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div style={sectionStyle}>
             <div
               style={{
                 display: "flex",
@@ -3253,374 +3528,6 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
             sectionStyle={sectionStyle}
             selectStyle={selectStyle}
           />
-          <div style={{ ...sectionStyle, display: "none" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 8,
-              }}
-            >
-              <div style={labelStyle}>Schema Designer</div>
-              <button
-                type="button"
-                onClick={addTable}
-                style={{
-                  border: "1px solid var(--border)",
-                  background: "var(--floating)",
-                  color: "var(--foreground)",
-                  borderRadius: 4,
-                  padding: "4px 8px",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
-                + Table
-              </button>
-            </div>
-
-            {((nodeData as DatabaseBlock).tables || []).length === 0 && (
-              <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                No tables yet.
-              </div>
-            )}
-
-            {((nodeData as DatabaseBlock).tables || []).map((table, tableIndex) => {
-              const isExpanded = expandedTables[tableIndex] ?? true;
-              return (
-                <div
-                  key={`${table.name}-${tableIndex}`}
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: 6,
-                    marginBottom: 8,
-                    background: "var(--floating)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: 8,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedTables((prev) => ({
-                          ...prev,
-                          [tableIndex]: !isExpanded,
-                        }))
-                      }
-                      style={{
-                        border: "none",
-                        background: "transparent",
-                        color: "var(--muted)",
-                        cursor: "pointer",
-                        fontSize: 11,
-                        padding: 0,
-                        width: 14,
-                      }}
-                    >
-                      {isExpanded ? "▾" : "▸"}
-                    </button>
-                    <input
-                      value={table.name}
-                      onChange={(e) => {
-                        const tables = [...
-                          ((nodeData as DatabaseBlock).tables || [])
-                        ];
-                        tables[tableIndex] = { ...tables[tableIndex], name: e.target.value };
-                        updateDatabaseTables(tables);
-                      }}
-                      placeholder="Table name"
-                      style={{ ...inputStyle, flex: 1 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const tables = ((nodeData as DatabaseBlock).tables || []).filter(
-                          (_, i) => i !== tableIndex,
-                        );
-                        updateDatabaseTables(tables);
-                      }}
-                      style={{
-                        border: "1px solid var(--border)",
-                        background: "transparent",
-                        color: "var(--muted)",
-                        borderRadius: 4,
-                        padding: "4px 6px",
-                        fontSize: 11,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  {isExpanded && (
-                    <div style={{ padding: 8, borderTop: "1px solid var(--border)" }}>
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {(table.fields || []).map((field, fieldIndex) => (
-                          <div
-                            key={`${field.name}-${fieldIndex}`}
-                            style={{
-                              border: "1px solid var(--border)",
-                              borderRadius: 4,
-                              padding: 6,
-                              display: "grid",
-                              gap: 6,
-                              background: "var(--panel)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "1.3fr 1fr auto",
-                                gap: 6,
-                              }}
-                            >
-                              <input
-                                value={field.name}
-                                onChange={(e) => {
-                                  const tables = [...
-                                    ((nodeData as DatabaseBlock).tables || [])
-                                  ];
-                                  const fields = [...(tables[tableIndex].fields || [])];
-                                  fields[fieldIndex] = {
-                                    ...fields[fieldIndex],
-                                    name: e.target.value,
-                                  };
-                                  tables[tableIndex] = { ...tables[tableIndex], fields };
-                                  updateDatabaseTables(tables);
-                                }}
-                                placeholder="field"
-                                style={inputStyle}
-                              />
-                              <select
-                                value={field.type}
-                                onChange={(e) => {
-                                  const tables = [...
-                                    ((nodeData as DatabaseBlock).tables || [])
-                                  ];
-                                  const fields = [...(tables[tableIndex].fields || [])];
-                                  fields[fieldIndex] = {
-                                    ...fields[fieldIndex],
-                                    type: e.target.value as DatabaseTableField["type"],
-                                  };
-                                  tables[tableIndex] = { ...tables[tableIndex], fields };
-                                  updateDatabaseTables(tables);
-                                }}
-                                style={selectStyle}
-                              >
-                                <option value="string">string</option>
-                                <option value="text">text</option>
-                                <option value="int">int</option>
-                                <option value="bigint">bigint</option>
-                                <option value="float">float</option>
-                                <option value="decimal">decimal</option>
-                                <option value="boolean">boolean</option>
-                                <option value="datetime">datetime</option>
-                                <option value="json">json</option>
-                                <option value="uuid">uuid</option>
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const tables = [...
-                                    ((nodeData as DatabaseBlock).tables || [])
-                                  ];
-                                  const fields = (tables[tableIndex].fields || []).filter(
-                                    (_, i) => i !== fieldIndex,
-                                  );
-                                  tables[tableIndex] = { ...tables[tableIndex], fields };
-                                  updateDatabaseTables(tables);
-                                }}
-                                style={{
-                                  border: "1px solid var(--border)",
-                                  background: "transparent",
-                                  color: "var(--muted)",
-                                  borderRadius: 4,
-                                  padding: "4px 6px",
-                                  fontSize: 11,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                x
-                              </button>
-                            </div>
-
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                              <input
-                                value={field.defaultValue || ""}
-                                onChange={(e) => {
-                                  const tables = [...
-                                    ((nodeData as DatabaseBlock).tables || [])
-                                  ];
-                                  const fields = [...(tables[tableIndex].fields || [])];
-                                  fields[fieldIndex] = {
-                                    ...fields[fieldIndex],
-                                    defaultValue: e.target.value || undefined,
-                                  };
-                                  tables[tableIndex] = { ...tables[tableIndex], fields };
-                                  updateDatabaseTables(tables);
-                                }}
-                                placeholder="default"
-                                style={inputStyle}
-                              />
-                              <input
-                                value={
-                                  field.references
-                                    ? `${field.references.table}.${field.references.field}`
-                                    : ""
-                                }
-                                onChange={(e) => {
-                                  const tables = [...
-                                    ((nodeData as DatabaseBlock).tables || [])
-                                  ];
-                                  const fields = [...(tables[tableIndex].fields || [])];
-                                  const raw = e.target.value.trim();
-                                  const [tableRef = "", fieldRef = ""] = raw.split(".");
-                                  fields[fieldIndex] = {
-                                    ...fields[fieldIndex],
-                                    references:
-                                      tableRef && fieldRef
-                                        ? { table: tableRef, field: fieldRef }
-                                        : undefined,
-                                    isForeignKey: Boolean(tableRef && fieldRef),
-                                  };
-                                  tables[tableIndex] = { ...tables[tableIndex], fields };
-                                  updateDatabaseTables(tables);
-                                }}
-                                placeholder="references table.field"
-                                style={inputStyle}
-                              />
-                            </div>
-
-                            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                              <label style={{ fontSize: 11, color: "var(--muted)" }}>
-                                <input
-                                  type="checkbox"
-                                  checked={field.nullable !== false}
-                                  onChange={(e) => {
-                                    const tables = [...
-                                      ((nodeData as DatabaseBlock).tables || [])
-                                    ];
-                                    const fields = [...(tables[tableIndex].fields || [])];
-                                    fields[fieldIndex] = {
-                                      ...fields[fieldIndex],
-                                      nullable: e.target.checked,
-                                      required: !e.target.checked,
-                                    };
-                                    tables[tableIndex] = { ...tables[tableIndex], fields };
-                                    updateDatabaseTables(tables);
-                                  }}
-                                />{" "}
-                                Nullable
-                              </label>
-                              <label style={{ fontSize: 11, color: "var(--muted)" }}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(field.isPrimaryKey)}
-                                  onChange={(e) => {
-                                    const tables = [...
-                                      ((nodeData as DatabaseBlock).tables || [])
-                                    ];
-                                    const fields = [...(tables[tableIndex].fields || [])];
-                                    fields[fieldIndex] = {
-                                      ...fields[fieldIndex],
-                                      isPrimaryKey: e.target.checked,
-                                      primaryKey: e.target.checked,
-                                    };
-                                    tables[tableIndex] = { ...tables[tableIndex], fields };
-                                    updateDatabaseTables(tables);
-                                  }}
-                                />{" "}
-                                Primary Key
-                              </label>
-                              <label style={{ fontSize: 11, color: "var(--muted)" }}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(field.isForeignKey)}
-                                  onChange={(e) => {
-                                    const tables = [...
-                                      ((nodeData as DatabaseBlock).tables || [])
-                                    ];
-                                    const fields = [...(tables[tableIndex].fields || [])];
-                                    fields[fieldIndex] = {
-                                      ...fields[fieldIndex],
-                                      isForeignKey: e.target.checked,
-                                    };
-                                    tables[tableIndex] = { ...tables[tableIndex], fields };
-                                    updateDatabaseTables(tables);
-                                  }}
-                                />{" "}
-                                Foreign Key
-                              </label>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const tables = [...
-                              ((nodeData as DatabaseBlock).tables || [])
-                            ];
-                            const fields = [...(tables[tableIndex].fields || [])];
-                            fields.push({
-                              name: `field_${fields.length + 1}`,
-                              type: "string",
-                              nullable: true,
-                              required: false,
-                              isPrimaryKey: false,
-                              primaryKey: false,
-                              isForeignKey: false,
-                            });
-                            tables[tableIndex] = { ...tables[tableIndex], fields };
-                            updateDatabaseTables(tables);
-                          }}
-                          style={{
-                            border: "1px solid var(--border)",
-                            background: "var(--floating)",
-                            color: "var(--foreground)",
-                            borderRadius: 4,
-                            padding: "4px 8px",
-                            fontSize: 11,
-                            cursor: "pointer",
-                          }}
-                        >
-                          + Field
-                        </button>
-                        <input
-                          value={(table.indexes || []).join(", ")}
-                          onChange={(e) => {
-                            const tables = [...
-                              ((nodeData as DatabaseBlock).tables || [])
-                            ];
-                            tables[tableIndex] = {
-                              ...tables[tableIndex],
-                              indexes: e.target.value
-                                .split(",")
-                                .map((x) => x.trim())
-                                .filter(Boolean),
-                            };
-                            updateDatabaseTables(tables);
-                          }}
-                          placeholder="indexes (comma separated)"
-                          style={{ ...inputStyle, flex: 1 }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </>
       )}
 

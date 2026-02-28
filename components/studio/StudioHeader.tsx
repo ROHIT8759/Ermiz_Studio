@@ -141,11 +141,7 @@ function HeaderActionButtons({ actions, variant }: HeaderActionButtonsProps) {
           }
       }
     >
-      {action.isLoading && action.id === "gen"
-        ? "Generating…"
-        : action.isLoading && action.id === "test"
-        ? "Building…"
-        : action.label}
+      {action.isLoading && action.id === "gen" ? "Generating…" : action.label}
     </button>
   ));
 }
@@ -436,7 +432,6 @@ type StudioHeaderProps = {
   creditLimit: number;
   creditUsedPercent: number;
   isGenerating: boolean;
-  isTestRunning: boolean;
   handleGenerateCode: () => void;
   handleRunTest: () => void;
   handleSaveChanges: () => void;
@@ -464,7 +459,6 @@ export function StudioHeader({
   creditLimit,
   creditUsedPercent,
   isGenerating,
-  isTestRunning,
   handleGenerateCode,
   handleRunTest,
   handleSaveChanges,
@@ -507,8 +501,7 @@ export function StudioHeader({
       id: "test",
       label: "Run Test",
       onClick: handleRunTest,
-      isLoading: isTestRunning,
-      title: "Build an interactive test UI from your current design",
+      title: "Open interactive test environment for your current design",
     },
     {
       id: "gen",

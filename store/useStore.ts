@@ -17,6 +17,7 @@ import {
   NodeData,
   InputField,
   OutputField,
+  ProcessDefinition,
   ProcessStep,
 } from "@/lib/schema/node";
 
@@ -265,7 +266,7 @@ export const useStore = create<RFState>((set, get) => {
       if (kind === "function_entry") {
         const existing = nodes.find((node) => {
           const d = node.data as NodeData;
-          return d.processType === "start_function";
+          return d.kind === "process" && (d as ProcessDefinition).processType === "start_function";
         });
         if (existing) {
           updateActiveGraph({
