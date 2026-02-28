@@ -195,7 +195,7 @@ export default function Home() {
 
   // Keep a stable ref so the countdown interval can call handleGenerateCode
   // without capturing a stale closure.
-  const handleGenerateCodeRef = useRef<() => Promise<void>>(async () => {});
+  const handleGenerateCodeRef = useRef<() => Promise<void>>(async () => { });
 
   // Auto-retry when the countdown reaches null after expiring (not after dismiss).
   const isCountingDown = useRef(false);
@@ -410,8 +410,8 @@ export default function Home() {
           }}
         >
           <span>
-            ✓ Last generation at {genStats.time} · 
-            <strong style={{ color: "var(--foreground)" }}>{genStats.requests}</strong> Gemini request{genStats.requests !== 1 ? "s" : ""} · 
+            ✓ Last generation at {genStats.time} ·
+            <strong style={{ color: "var(--foreground)" }}>{genStats.requests}</strong> Gemini request{genStats.requests !== 1 ? "s" : ""} ·
             <strong style={{ color: "var(--foreground)" }}>{genStats.files}</strong> file{genStats.files !== 1 ? "s" : ""} generated
           </span>
           <button

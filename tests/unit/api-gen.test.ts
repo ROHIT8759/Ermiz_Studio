@@ -284,7 +284,7 @@ describe("POST /api/gen", () => {
     await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
 
     for (const call of mockGenerateContent.mock.calls) {
-      expect(call[0].model).toBe("gemini-2.5-flash-lite");
+      expect(call[0].model).toBe("gemini-2.0-flash");
     }
   });
 });
