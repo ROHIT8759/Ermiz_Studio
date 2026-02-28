@@ -338,12 +338,14 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
   const [requestTab, setRequestTab] = useState<"body" | "headers" | "query">(
     "body",
   );
+  const [newDepName, setNewDepName] = useState("");
 
   const selectedNode = nodes.find((n) => n.selected);
 
   const panelStyle: React.CSSProperties = {
     width,
     height: "100%",
+    minHeight: 0,
     flexShrink: 0,
     borderLeft: "1px solid var(--border)",
     background: "var(--panel)",
@@ -351,6 +353,8 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     display: "flex",
     flexDirection: "column",
     gap: 12,
+    overflowX: "hidden",
+    scrollbarGutter: "stable",
   };
 
   if (!selectedNode) {
@@ -706,6 +710,17 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     reader.readAsText(file);
   };
 
+  // Computed values for the Function Logic editor
+  const processNodeForLogic = kind === "process" ? (nodeData as ProcessDefinition) : null;
+  const funcInputNames =
+    processNodeForLogic?.inputs?.map((i) => i.name).filter(Boolean) ?? [];
+  const funcDefaultTemplate =
+    funcInputNames.length > 0
+      ? `async function ${processNodeForLogic?.id}({ ${funcInputNames.join(", ")} }: Record<string, unknown>) {\n  // TODO: implement logic\n  return {};\n}`
+      : `async function ${processNodeForLogic?.id}(inputs: Record<string, unknown>) {\n  // TODO: implement logic\n  return {};\n}`;
+  const funcLogicValue = processNodeForLogic?.logic ?? funcDefaultTemplate;
+  const funcLineCount = funcLogicValue.split("\n").length;
+
 
   return (
     <aside className="sidebar-scroll" style={panelStyle}>
@@ -1056,6 +1071,348 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                 : "Steps are defined in the visual graph"}
             </div>
           </div>
+
+          {/* Function Logic Editor — shown on Functions tab */}
+          {activeTab === "functions" && (
+            <>
+              {/* Available Inputs */}
+              {funcInputNames.length > 0 && (
+                <div style={sectionStyle}>
+                  <div style={{ ...labelStyle, marginBottom: 8 }}>Available Inputs</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                    {funcInputNames.map((name) => (
+                      <span
+                        key={name}
+                        style={{
+                          fontFamily: "'Fira Code', 'Cascadia Code', monospace",
+                          fontSize: 11,
+                          background: "rgba(99,102,241,0.12)",
+                          color: "var(--primary)",
+                          border: "1px solid rgba(99,102,241,0.35)",
+                          borderRadius: 4,
+                          padding: "2px 8px",
+                        }}
+                      >
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", lineHeight: 1.5 }}>
+                    Access via{" "}
+                    <code
+                      style={{
+                        fontFamily: "monospace",
+                        background: "var(--background)",
+                        padding: "1px 4px",
+                        borderRadius: 3,
+                        fontSize: 10,
+                      }}
+                    >
+                      inputs
+                    </code>{" "}
+                    parameter in the function body.
+                  </div>
+                </div>
+              )}
+
+              {/* Code Editor */}
+              <div style={sectionStyle}>
+                <div
+                  style={{
+                    ...labelStyle,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <span>Function Logic</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "var(--muted)",
+                      fontFamily: "monospace",
+                      background: "var(--background)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 4,
+                      padding: "2px 6px",
+                    }}
+                  >
+                    TypeScript
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--muted)",
+                    marginBottom: 8,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Write the implementation body. Use{" "}
+                  <code
+                    style={{
+                      fontFamily: "monospace",
+                      background: "var(--background)",
+                      padding: "1px 4px",
+                      borderRadius: 3,
+                      fontSize: 10,
+                    }}
+                  >
+                    inputs
+                  </code>{" "}
+                  to access parameters and return a value.
+                </div>
+                <div
+                  style={{
+                    position: "relative",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    overflow: "hidden",
+                    background: "#0d1117",
+                  }}
+                >
+                  {/* line number gutter — real numbers */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      bottom: 0,
+                      width: 36,
+                      background: "rgba(0,0,0,0.3)",
+                      borderRight: "1px solid rgba(255,255,255,0.06)",
+                      pointerEvents: "none",
+                      zIndex: 1,
+                      paddingTop: 10,
+                      overflow: "hidden",
+                      userSelect: "none",
+                    }}
+                  >
+                    {Array.from({ length: funcLineCount }, (_, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          fontSize: 10,
+                          lineHeight: "1.65em",
+                          color: "rgba(139,148,158,0.55)",
+                          textAlign: "right",
+                          paddingRight: 6,
+                          fontFamily: "'Fira Code', 'Cascadia Code', monospace",
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+                    ))}
+                  </div>
+                  <textarea
+                    value={funcLogicValue}
+                    onChange={(e) =>
+                      handleUpdate({ logic: e.target.value } as Partial<ProcessDefinition>)
+                    }
+                    spellCheck={false}
+                    style={{
+                      width: "100%",
+                      minHeight: 220,
+                      resize: "vertical",
+                      background: "transparent",
+                      color: "#e6edf3",
+                      fontFamily:
+                        "'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace",
+                      fontSize: 12,
+                      lineHeight: 1.65,
+                      padding: "10px 10px 10px 46px",
+                      border: "none",
+                      outline: "none",
+                      caretColor: "#79c0ff",
+                      whiteSpace: "pre",
+                      overflowWrap: "normal",
+                      overflowX: "auto",
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: 6,
+                    gap: 6,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleUpdate({
+                        logic: funcDefaultTemplate,
+                      } as Partial<ProcessDefinition>)
+                    }
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--floating)",
+                      color: "var(--muted)",
+                      borderRadius: 6,
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard.writeText(funcLogicValue).catch(() => {})
+                    }
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--floating)",
+                      color: "var(--secondary)",
+                      borderRadius: 6,
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              {/* Dependencies */}
+              <div style={sectionStyle}>
+                <div style={{ ...labelStyle, marginBottom: 8 }}>Dependencies</div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--muted)",
+                    marginBottom: 8,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  npm packages required by this function (e.g.{" "}
+                  <code
+                    style={{
+                      fontFamily: "monospace",
+                      background: "var(--background)",
+                      padding: "1px 4px",
+                      borderRadius: 3,
+                      fontSize: 10,
+                    }}
+                  >
+                    axios
+                  </code>
+                  ,{" "}
+                  <code
+                    style={{
+                      fontFamily: "monospace",
+                      background: "var(--background)",
+                      padding: "1px 4px",
+                      borderRadius: 3,
+                      fontSize: 10,
+                    }}
+                  >
+                    zod
+                  </code>
+                  ).
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                  <input
+                    type="text"
+                    value={newDepName}
+                    onChange={(e) => setNewDepName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newDepName.trim()) {
+                        const existing =
+                          (nodeData as ProcessDefinition).dependencies ?? [];
+                        if (!existing.includes(newDepName.trim())) {
+                          handleUpdate({
+                            dependencies: [...existing, newDepName.trim()],
+                          } as Partial<ProcessDefinition>);
+                        }
+                        setNewDepName("");
+                      }
+                    }}
+                    placeholder="package-name  (Enter)"
+                    style={{ ...inputStyle, flex: 1, fontSize: 11 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newDepName.trim()) return;
+                      const existing =
+                        (nodeData as ProcessDefinition).dependencies ?? [];
+                      if (!existing.includes(newDepName.trim())) {
+                        handleUpdate({
+                          dependencies: [...existing, newDepName.trim()],
+                        } as Partial<ProcessDefinition>);
+                      }
+                      setNewDepName("");
+                    }}
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--floating)",
+                      color: "var(--secondary)",
+                      borderRadius: 6,
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {((nodeData as ProcessDefinition).dependencies ?? []).length === 0 ? (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                      No dependencies added
+                    </span>
+                  ) : (
+                    ((nodeData as ProcessDefinition).dependencies ?? []).map((dep) => (
+                      <span
+                        key={dep}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontFamily: "monospace",
+                          fontSize: 11,
+                          background: "rgba(0,0,0,0.2)",
+                          color: "#e6edf3",
+                          border: "1px solid var(--border)",
+                          borderRadius: 4,
+                          padding: "2px 6px 2px 8px",
+                        }}
+                      >
+                        {dep}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const existing =
+                              (nodeData as ProcessDefinition).dependencies ?? [];
+                            handleUpdate({
+                              dependencies: existing.filter((d) => d !== dep),
+                            } as Partial<ProcessDefinition>);
+                          }}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            color: "var(--muted)",
+                            cursor: "pointer",
+                            fontSize: 14,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
 

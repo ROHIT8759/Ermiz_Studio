@@ -147,6 +147,8 @@ export const ProcessDefinitionSchema = z.object({
       event: z.string().optional(),
     })
     .optional(),
+  logic: z.string().optional(),
+  dependencies: z.array(z.string()).optional(),
 });
 
 // ============================================
