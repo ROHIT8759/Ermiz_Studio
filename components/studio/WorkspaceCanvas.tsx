@@ -366,6 +366,7 @@ export function WorkspaceCanvas({
           </button>
 
           <aside
+            className="sidebar-scroll"
             onWheel={(e) => {
               // Prevent canvas zoom while scrolling sidebar, but allow native scroll
               const target = e.currentTarget;
@@ -389,12 +390,7 @@ export function WorkspaceCanvas({
               display: "flex",
               flexDirection: "column",
               gap: 12,
-              overflowY: "auto",
-              overflowX: "hidden",
-              scrollBehavior: "smooth",
               scrollbarGutter: "stable",
-              overscrollBehaviorY: "contain",
-              WebkitOverflowScrolling: "touch",
             }}
           >
             {flatList ? (
