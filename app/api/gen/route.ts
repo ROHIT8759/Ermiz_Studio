@@ -352,6 +352,12 @@ async function genCodeAi(input: {
   startKeyIndex?: number;
   onRequest?: () => void;
 }): Promise<string> {
+  // Files that are legitimately empty — skip the AI call entirely
+  const emptyFilePatterns = [/\.gitkeep$/, /\.gitignore$/, /__init__\.py$/];
+  if (emptyFilePatterns.some((p) => p.test(input.filePath))) {
+    return "";
+  }
+
   const prompt = `
 You are a senior software engineer.
 
@@ -395,6 +401,7 @@ Generate complete code now.
   // wrapping around, and skipping already-exhausted keys.
   const n = input.apiKeys.length;
   const start = (input.startKeyIndex ?? 0) % n;
+  let hadEmptyResponse = false;
 
   for (let attempt = 0; attempt < n; attempt++) {
     const i = (start + attempt) % n;
@@ -413,6 +420,7 @@ Generate complete code now.
 
       if (!text) {
         console.warn(`CODE ${input.filePath}: Key #${i + 1} returned empty response, trying next...`);
+        hadEmptyResponse = true;
         continue; // try next key
       }
 
@@ -432,6 +440,13 @@ Generate complete code now.
       const msg = error instanceof Error ? error.message : String(error);
       throw new Error(`Code generation failed for ${input.filePath}: ${msg}`);
     }
+  }
+
+  // If at least one key returned empty (not quota error), the file is
+  // likely legitimately empty — return empty string instead of 429.
+  if (hadEmptyResponse) {
+    console.warn(`CODE ${input.filePath}: All keys returned empty, treating as empty file.`);
+    return "";
   }
 
   // All keys exhausted
