@@ -2,7 +2,11 @@
 
 import React from "react";
 import Image from "next/image";
-import { HEADER_MENU_TEXT, tabLabel, WorkspaceTab } from "@/components/studio/config";
+import {
+  HEADER_MENU_TEXT,
+  tabLabel,
+  WorkspaceTab,
+} from "@/components/studio/config";
 
 export type StudioUser = {
   email?: string | null;
@@ -11,7 +15,7 @@ export type StudioUser = {
 };
 
 type HeaderAction = {
-  id: "save" | "commit" | "reset";
+  id: "save" | "gen" | "commit" | "reset";
   label: string;
   onClick: () => void;
   title?: string;
@@ -24,7 +28,11 @@ type HeaderTabsProps = {
   setActiveTab: (tab: WorkspaceTab) => void;
 };
 
-function HeaderTabs({ activeTab, isCompactViewport, setActiveTab }: HeaderTabsProps) {
+function HeaderTabs({
+  activeTab,
+  isCompactViewport,
+  setActiveTab,
+}: HeaderTabsProps) {
   return (
     <div
       style={{
@@ -77,7 +85,8 @@ function HeaderTabs({ activeTab, isCompactViewport, setActiveTab }: HeaderTabsPr
                   ? "color-mix(in srgb, var(--panel) 85%, #111826 15%)"
                   : "transparent",
               color: activeTab === tab ? "var(--foreground)" : "var(--muted)",
-              boxShadow: activeTab === tab ? "inset 0 0 0 1px var(--border)" : "none",
+              boxShadow:
+                activeTab === tab ? "inset 0 0 0 1px var(--border)" : "none",
             }}
           >
             {tabLabel[tab]}
@@ -236,9 +245,13 @@ function ProfileMenu({
       >
         <div style={{ fontSize: 12, fontWeight: 600 }}>{displayName}</div>
         {displayEmail ? (
-          <div style={{ fontSize: 11, color: "var(--muted)" }}>{displayEmail}</div>
+          <div style={{ fontSize: 11, color: "var(--muted)" }}>
+            {displayEmail}
+          </div>
         ) : (
-          <div style={{ fontSize: 11, color: "var(--muted)" }}>Not signed in</div>
+          <div style={{ fontSize: 11, color: "var(--muted)" }}>
+            Not signed in
+          </div>
         )}
       </div>
 
@@ -280,7 +293,9 @@ function ProfileMenu({
           marginBottom: 8,
         }}
       >
-        <div style={{ fontSize: 11, color: "var(--muted)" }}>Credit Limit View</div>
+        <div style={{ fontSize: 11, color: "var(--muted)" }}>
+          Credit Limit View
+        </div>
         <div style={{ fontSize: 12, marginTop: 4 }}>
           {creditUsed} / {creditLimit} credits used
         </div>
@@ -330,7 +345,8 @@ function ProfileMenu({
           width: "100%",
           textAlign: "left",
           border: "1px solid var(--border)",
-          background: "color-mix(in srgb, var(--primary) 22%, var(--panel) 78%)",
+          background:
+            "color-mix(in srgb, var(--primary) 22%, var(--panel) 78%)",
           color: "var(--foreground)",
           padding: "8px 10px",
           fontSize: 12,
@@ -411,6 +427,7 @@ type StudioHeaderProps = {
   creditUsed: number;
   creditLimit: number;
   creditUsedPercent: number;
+  handleGenerateCode: () => void;
   handleSaveChanges: () => void;
   handleCommitChanges: () => void;
   handleResetLayout: () => void;
@@ -435,6 +452,7 @@ export function StudioHeader({
   creditUsed,
   creditLimit,
   creditUsedPercent,
+  handleGenerateCode,
   handleSaveChanges,
   handleCommitChanges,
   handleResetLayout,
@@ -444,7 +462,10 @@ export function StudioHeader({
   handleBuyPro,
 }: StudioHeaderProps) {
   const userMetadata = (user?.user_metadata ?? {}) as Record<string, unknown>;
-  const identityData = (user?.identities?.[0]?.identity_data ?? {}) as Record<string, unknown>;
+  const identityData = (user?.identities?.[0]?.identity_data ?? {}) as Record<
+    string,
+    unknown
+  >;
   const displayName =
     (typeof userMetadata.full_name === "string" && userMetadata.full_name) ||
     (typeof userMetadata.name === "string" && userMetadata.name) ||
@@ -468,7 +489,17 @@ export function StudioHeader({
       .join("") || "U";
 
   const headerActions: HeaderAction[] = [
-    { id: "save", label: HEADER_MENU_TEXT.saveChanges, onClick: handleSaveChanges },
+    {
+      id: "gen",
+      label: HEADER_MENU_TEXT.genCode,
+      onClick: handleGenerateCode,
+    },
+
+    {
+      id: "save",
+      label: HEADER_MENU_TEXT.saveChanges,
+      onClick: handleSaveChanges,
+    },
     {
       id: "commit",
       label: HEADER_MENU_TEXT.commit,
@@ -513,7 +544,9 @@ export function StudioHeader({
           marginLeft: isCompactViewport ? "auto" : 0,
         }}
       >
-        {!isCompactViewport && <HeaderActionButtons actions={headerActions} variant="desktop" />}
+        {!isCompactViewport && (
+          <HeaderActionButtons actions={headerActions} variant="desktop" />
+        )}
         {user ? (
           <ProfileButton
             avatarUrl={avatarUrl}

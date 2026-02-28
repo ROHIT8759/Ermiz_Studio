@@ -45,11 +45,7 @@ export type NodeKind =
 
 type GraphPreset = "empty" | "hello_world_api";
 
-type WorkspaceTab =
-  | "api"
-  | "database"
-  | "functions"
-  | "agent";
+type WorkspaceTab = "api" | "database" | "functions" | "agent";
 
 type GraphState = {
   nodes: Node[];
@@ -151,7 +147,7 @@ const graphPresets: Record<GraphPreset, { nodes: Node[]; edges: Edge[] }> = {
             success: [{ name: "message", type: "string" }],
             error: [{ name: "message", type: "string" }],
           },
-          steps: [{ id: "step1", kind: "ref", ref: "returnHelloWorld" }],
+          steps: [],
         },
       },
     ],
@@ -644,7 +640,7 @@ export const useStore = create<RFState>((set, get) => {
               protocol: "grpc",
               config: {
                 protobufDefinition:
-                  "syntax = \"proto3\";\nservice ApiService { rpc Execute (ExecuteRequest) returns (ExecuteResponse); }\nmessage ExecuteRequest { string id = 1; }\nmessage ExecuteResponse { string status = 1; }",
+                  'syntax = "proto3";\nservice ApiService { rpc Execute (ExecuteRequest) returns (ExecuteResponse); }\nmessage ExecuteRequest { string id = 1; }\nmessage ExecuteResponse { string status = 1; }',
                 service: "ApiService",
                 rpcMethods: [{ name: "Execute", type: "unary" }],
               },
@@ -707,192 +703,195 @@ export const useStore = create<RFState>((set, get) => {
             description: "Incoming webhook callback interface",
           },
         },
-      infra_ec2: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_ec2_${Date.now()}`,
-          label: "EC2 Instance",
-          resourceType: "ec2",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            instanceType: "t3.large",
-            ami: "ami-0abcdef1234567890",
-            count: 2,
-            subnetIds: "subnet-public-a, subnet-public-b",
-            securityGroups: "sg-app",
-            diskGb: 50,
-            autoscalingMin: 2,
-            autoscalingMax: 6,
+        infra_ec2: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_ec2_${Date.now()}`,
+            label: "EC2 Instance",
+            resourceType: "ec2",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              instanceType: "t3.large",
+              ami: "ami-0abcdef1234567890",
+              count: 2,
+              subnetIds: "subnet-public-a, subnet-public-b",
+              securityGroups: "sg-app",
+              diskGb: 50,
+              autoscalingMin: 2,
+              autoscalingMax: 6,
+            },
           },
         },
-      },
-      infra_lambda: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_lambda_${Date.now()}`,
-          label: "Lambda Function",
-          resourceType: "lambda",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            runtime: "nodejs20.x",
-            memoryMb: 1024,
-            timeoutSec: 30,
-            handler: "handler.main",
-            source: "s3://ermiz-artifacts/functions.zip",
-            trigger: "API Gateway",
-            environmentVars: "NODE_ENV=production",
+        infra_lambda: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_lambda_${Date.now()}`,
+            label: "Lambda Function",
+            resourceType: "lambda",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              runtime: "nodejs20.x",
+              memoryMb: 1024,
+              timeoutSec: 30,
+              handler: "handler.main",
+              source: "s3://ermiz-artifacts/functions.zip",
+              trigger: "API Gateway",
+              environmentVars: "NODE_ENV=production",
+            },
           },
         },
-      },
-      infra_eks: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_eks_${Date.now()}`,
-          label: "EKS Cluster",
-          resourceType: "eks",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            version: "1.30",
-            nodeType: "m6i.large",
-            nodeCount: 3,
-            minNodes: 3,
-            maxNodes: 12,
-            vpcId: "vpc-main",
-            privateSubnets: "subnet-private-a, subnet-private-b",
-            clusterLogs: "api,audit,authenticator",
+        infra_eks: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_eks_${Date.now()}`,
+            label: "EKS Cluster",
+            resourceType: "eks",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              version: "1.30",
+              nodeType: "m6i.large",
+              nodeCount: 3,
+              minNodes: 3,
+              maxNodes: 12,
+              vpcId: "vpc-main",
+              privateSubnets: "subnet-private-a, subnet-private-b",
+              clusterLogs: "api,audit,authenticator",
+            },
           },
         },
-      },
-      infra_vpc: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_vpc_${Date.now()}`,
-          label: "VPC Network",
-          resourceType: "vpc",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            cidr: "10.0.0.0/16",
-            publicSubnets: "10.0.1.0/24, 10.0.2.0/24",
-            privateSubnets: "10.0.11.0/24, 10.0.12.0/24",
-            natGateways: 2,
-            flowLogs: true,
+        infra_vpc: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_vpc_${Date.now()}`,
+            label: "VPC Network",
+            resourceType: "vpc",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              cidr: "10.0.0.0/16",
+              publicSubnets: "10.0.1.0/24, 10.0.2.0/24",
+              privateSubnets: "10.0.11.0/24, 10.0.12.0/24",
+              natGateways: 2,
+              flowLogs: true,
+            },
           },
         },
-      },
-      infra_s3: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_s3_${Date.now()}`,
-          label: "S3 Bucket",
-          resourceType: "s3",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            bucketName: "ermiz-assets-prod",
-            versioning: true,
-            encryption: "SSE-S3",
-            lifecycle: "archive after 30d",
-            publicAccess: "blocked",
+        infra_s3: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_s3_${Date.now()}`,
+            label: "S3 Bucket",
+            resourceType: "s3",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              bucketName: "ermiz-assets-prod",
+              versioning: true,
+              encryption: "SSE-S3",
+              lifecycle: "archive after 30d",
+              publicAccess: "blocked",
+            },
           },
         },
-      },
-      infra_rds: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_rds_${Date.now()}`,
-          label: "RDS Instance",
-          resourceType: "rds",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            engine: "postgres",
-            engineVersion: "16",
-            instanceClass: "db.t4g.medium",
-            storageGb: 100,
-            multiAz: true,
-            backupRetentionDays: 7,
-            subnetGroup: "rds-private",
+        infra_rds: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_rds_${Date.now()}`,
+            label: "RDS Instance",
+            resourceType: "rds",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              engine: "postgres",
+              engineVersion: "16",
+              instanceClass: "db.t4g.medium",
+              storageGb: 100,
+              multiAz: true,
+              backupRetentionDays: 7,
+              subnetGroup: "rds-private",
+            },
           },
         },
-      },
-      infra_lb: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_lb_${Date.now()}`,
-          label: "Load Balancer",
-          resourceType: "load_balancer",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            lbType: "ALB",
-            scheme: "internet-facing",
-            listeners: "80 -> 443",
-            targetGroup: "api-service",
-            healthCheckPath: "/health",
-            tlsCertArn: "arn:aws:acm:region:account:certificate/123",
+        infra_lb: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_lb_${Date.now()}`,
+            label: "Load Balancer",
+            resourceType: "load_balancer",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              lbType: "ALB",
+              scheme: "internet-facing",
+              listeners: "80 -> 443",
+              targetGroup: "api-service",
+              healthCheckPath: "/health",
+              tlsCertArn: "arn:aws:acm:region:account:certificate/123",
+            },
           },
         },
-      },
-      infra_hpc: {
-        type: "infra",
-        data: {
-          kind: "infra",
-          id: `infra_hpc_${Date.now()}`,
-          label: "HPC Cluster",
-          resourceType: "hpc",
-          provider: "aws",
-          environment: "production",
-          region: "us-east-1",
-          tags: [],
-          description: "",
-          config: {
-            scheduler: "slurm",
-            instanceType: "c7i.4xlarge",
-            nodeCount: 8,
-            maxNodes: 32,
-            sharedStorage: "efs-hpc",
-            queue: "batch-default",
+        infra_hpc: {
+          type: "infra",
+          data: {
+            kind: "infra",
+            id: `infra_hpc_${Date.now()}`,
+            label: "HPC Cluster",
+            resourceType: "hpc",
+            provider: "aws",
+            environment: "production",
+            region: "us-east-1",
+            tags: [],
+            description: "",
+            config: {
+              scheduler: "slurm",
+              instanceType: "c7i.4xlarge",
+              nodeCount: 8,
+              maxNodes: 32,
+              sharedStorage: "efs-hpc",
+              queue: "batch-default",
+            },
           },
         },
-      },
-    };
+      };
 
       const config = nodeConfigs[kind];
       const isApiKind = kind === "api_binding" || kind.startsWith("api_");
       let nodeData = { ...(config.data as object) } as NodeData;
-      const nextNodes: Node[] = nodes.map((node) => ({ ...node, selected: false }));
+      const nextNodes: Node[] = nodes.map((node) => ({
+        ...node,
+        selected: false,
+      }));
 
       if (activeTab === "api" && isApiKind && nodeData.kind === "api_binding") {
         const existingApiProcessNode = nextNodes.find((node) => {
@@ -902,10 +901,11 @@ export const useStore = create<RFState>((set, get) => {
         let apiProcessId = "";
 
         if (existingApiProcessNode) {
-          const existingProcessData = existingApiProcessNode.data as NodeData & {
-            kind: "process";
-            id: string;
-          };
+          const existingProcessData =
+            existingApiProcessNode.data as NodeData & {
+              kind: "process";
+              id: string;
+            };
           apiProcessId = existingProcessData.id;
         } else {
           apiProcessId = `api_function_${Date.now()}`;

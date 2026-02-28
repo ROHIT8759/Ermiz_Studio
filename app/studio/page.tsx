@@ -36,7 +36,9 @@ export default function Home() {
     nextUser: {
       email?: string | null;
       user_metadata?: Record<string, unknown> | null;
-      identities?: Array<{ identity_data?: Record<string, unknown> | null }> | null;
+      identities?: Array<{
+        identity_data?: Record<string, unknown> | null;
+      }> | null;
     } | null,
   ) => {
     setAvatarFailed(false);
@@ -76,7 +78,7 @@ export default function Home() {
       try {
         const res = await fetch("/api/credits");
         if (!res.ok) return;
-        const json = await res.json() as {
+        const json = (await res.json()) as {
           balance?: { availableCredits?: number; monthlyFreeCredits?: number };
         };
         if (json.balance) {
@@ -148,9 +150,11 @@ export default function Home() {
 
     loadUser();
 
-    const { data } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-      applyUser(session?.user ?? null);
-    });
+    const { data } = supabaseClient.auth.onAuthStateChange(
+      (_event, session) => {
+        applyUser(session?.user ?? null);
+      },
+    );
 
     return () => {
       isMounted = false;
@@ -183,6 +187,86 @@ export default function Home() {
   useEffect(() => {
     setActiveWorkspaceTab(activeTab);
   }, [activeTab, setActiveWorkspaceTab]);
+
+  const handleGenerateCode = async () => {
+    try {
+      console.log("🔹 Starting code generation...");
+
+      const graphs = exportGraphs();
+      console.log("📦 Exported graphs:", graphs);
+
+      // Merge all tabs into single graph
+      const allNodes = Object.values(graphs).flatMap((g) => g.nodes);
+      const alleges = Object.values(graphs).flatMap((g) => g.edges);
+
+      console.log("🧩 Total Nodes:", allNodes.length);
+      console.log("🔗 Total Edges:", alleges.length);
+
+      // Hardcoded tech stack + metadata
+      const techStack = {
+        frontend: "none",
+        backend: "python",
+        database: "postgresql",
+        deployment: "docker",
+      };
+
+      const metadata = {
+        language: "python",
+        framework: "fastapi",
+        architectureStyle: "microservices",
+        generatedBy: "ermiz-studio",
+      };
+
+      console.log("🛠 Tech Stack:", techStack);
+      console.log("🧾 Metadata:", metadata);
+
+      console.log("🚀 Sending request to /api/gen...");
+
+      const res = await fetch("/api/gen", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nodes: allNodes,
+          edges: alleges,
+          techStack,
+          metadata,
+        }),
+      });
+
+      console.log("📡 Response received. Status:", res.status);
+
+      if (!res.ok) {
+        console.error("❌ Generation failed. Status:", res.status);
+        const errorText = await res.text().catch(() => "No error body");
+        console.error("❌ Error body:", errorText);
+        return;
+      }
+
+      console.log("📦 Receiving ZIP blob...");
+      const blob = await res.blob();
+      console.log("✅ Blob size (bytes):", blob.size);
+
+      const url = window.URL.createObjectURL(blob);
+      console.log("🔗 Created download URL");
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "generated-project.zip";
+      document.body.appendChild(a);
+
+      console.log("⬇️ Triggering download...");
+      a.click();
+
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      console.log("🎉 Generation complete.");
+    } catch (error) {
+      console.error("🔥 Unexpected error during generation:", error);
+    }
+  };
 
   const handleSaveChanges = () => {
     try {
@@ -246,7 +330,8 @@ export default function Home() {
         <div
           role="alert"
           style={{
-            background: "color-mix(in srgb, var(--primary) 18%, var(--panel) 82%)",
+            background:
+              "color-mix(in srgb, var(--primary) 18%, var(--panel) 82%)",
             borderBottom: "1px solid var(--border)",
             padding: "10px 18px",
             fontSize: 12,
@@ -295,6 +380,7 @@ export default function Home() {
         creditUsed={creditUsed}
         creditLimit={creditLimit}
         creditUsedPercent={creditUsedPercent}
+        handleGenerateCode={handleGenerateCode}
         handleSaveChanges={handleSaveChanges}
         handleCommitChanges={handleCommitChanges}
         handleResetLayout={handleResetLayout}
@@ -312,9 +398,10 @@ export default function Home() {
         }}
       />
 
-      <StudioWorkspace activeTab={activeTab} resetLayoutSignal={resetLayoutSignal} />
+      <StudioWorkspace
+        activeTab={activeTab}
+        resetLayoutSignal={resetLayoutSignal}
+      />
     </StudioLayout>
   );
 }
-
-
