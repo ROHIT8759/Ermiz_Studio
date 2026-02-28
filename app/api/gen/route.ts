@@ -183,7 +183,11 @@ ${JSON.stringify(
     };
   } catch (error) {
     console.error("PLAN ARCHITECTURE ERROR:", error);
-    throw new Error("Architecture planning failed");
+    throw new Error(
+      `Architecture planning failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 }
 
@@ -261,6 +265,10 @@ Generate complete code now.
     return text;
   } catch (error) {
     console.error("CODE GENERATION ERROR:", error);
-    throw new Error(`Code generation failed for ${input.filePath}`);
+    throw new Error(
+      `Code generation failed for ${input.filePath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 }
