@@ -204,13 +204,25 @@ describe("POST /api/gen", () => {
 
   // ── AI failure paths ──────────────────────────────────────────────────────
 
-  it("returns 500 when the AI plan call throws", async () => {
-    mockGenerateContent.mockRejectedValueOnce(new Error("AI quota exceeded"));
+  it("returns 500 when the AI plan call throws a non-quota error", async () => {
+    mockGenerateContent.mockRejectedValueOnce(new Error("network connection refused"));
 
     const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toBe("Internal server error");
+  });
+
+  it("returns 429 when Gemini returns RESOURCE_EXHAUSTED on plan call", async () => {
+    mockGenerateContent.mockRejectedValueOnce(
+      new Error('RESOURCE_EXHAUSTED: Please retry in 54s'),
+    );
+
+    const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toContain("quota exceeded");
+    expect(body.retryAfter).toBeGreaterThan(0);
   });
 
   it("returns 500 when AI returns malformed plan JSON", async () => {
@@ -233,10 +245,10 @@ describe("POST /api/gen", () => {
     expect(body.error).toBe("Internal server error");
   });
 
-  it("returns 500 when genCodeAi rejects for one of the files", async () => {
+  it("returns 500 when genCodeAi rejects with a non-quota error", async () => {
     mockGenerateContent
       .mockResolvedValueOnce(PLAN_RESPONSE)
-      .mockRejectedValueOnce(new Error("rate limit"));
+      .mockRejectedValueOnce(new Error("unexpected server error"));
 
     const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
     expect(res.status).toBe(500);

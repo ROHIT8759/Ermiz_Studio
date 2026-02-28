@@ -5,6 +5,57 @@ import { GoogleGenAI } from "@google/genai";
 
 export const runtime = "nodejs";
 
+/** Thrown when the Gemini API returns RESOURCE_EXHAUSTED (free-tier quota). */
+class QuotaExceededError extends Error {
+  retryAfter: number;
+  constructor(retryAfter = 60) {
+    super("Gemini API free-tier quota exceeded");
+    this.name = "QuotaExceededError";
+    this.retryAfter = retryAfter;
+  }
+}
+
+function getQuotaRetryAfter(error: unknown): number | null {
+  const msg = error instanceof Error ? error.message : String(error);
+  const hasQuotaMarker =
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("\"code\":429") ||
+    msg.toLowerCase().includes("quota exceeded") ||
+    msg.toLowerCase().includes("rate limit");
+
+  if (hasQuotaMarker) {
+    const retryMatch =
+      msg.match(/retryDelay["\s:]+?(\d+)s/i) ||
+      msg.match(/retry in ([\d.]+)s/i);
+    return retryMatch ? Math.ceil(Number(retryMatch[1])) : 60;
+  }
+
+  if (error && typeof error === "object" && "error" in error) {
+    const anyError = error as {
+      error?: {
+        code?: number;
+        status?: string;
+        message?: string;
+        details?: Array<{
+          "@type"?: string;
+          retryDelay?: string;
+        }>;
+      };
+    };
+    const code = anyError.error?.code;
+    const status = anyError.error?.status;
+    if (code === 429 || status === "RESOURCE_EXHAUSTED") {
+      const retryDelay = anyError.error?.details?.find(
+        (detail) => detail?.retryDelay,
+      )?.retryDelay;
+      const retryMatch = retryDelay?.match(/^(\d+)(?:\.\d+)?s$/);
+      return retryMatch ? Math.ceil(Number(retryMatch[1])) : 60;
+    }
+  }
+
+  return null;
+}
+
 interface GenRequestBody {
   nodes: Node[];
   edges: Edge[];
@@ -35,7 +86,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1️⃣ Plan Architecture
+    // 1) Plan architecture
     const architecturePlan = await planArchitectureAi({
       nodes: body.nodes,
       edges: body.edges,
@@ -51,7 +102,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2️⃣ Generate Code Files in parallel (cap at 20 to avoid timeout)
+    // 2) Generate code files in parallel (cap at 20 to avoid timeout)
     const filesToGenerate = architecturePlan.files.slice(0, 20);
     const generatedEntries = await Promise.all(
       filesToGenerate.map(async (file) => {
@@ -66,7 +117,7 @@ export async function POST(req: NextRequest) {
     );
     const generatedFiles = Object.fromEntries(generatedEntries);
 
-    // 3️⃣ Zip All Files
+    // 3) Zip all files
     const zip = new JSZip();
     Object.entries(generatedFiles).forEach(([filePath, content]) => {
       zip.file(filePath, content);
@@ -82,9 +133,25 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error: unknown) {
+    const retryAfter =
+      error instanceof QuotaExceededError
+        ? Math.max(1, Math.floor(error.retryAfter))
+        : getQuotaRetryAfter(error);
+    if (retryAfter !== null) {
+      return NextResponse.json(
+        {
+          error: "AI quota exceeded",
+          message:
+            "Gemini quota exhausted or rate-limited. Please wait and retry, or upgrade your plan.",
+          retryAfter,
+        },
+        { status: 429, headers: { "Retry-After": String(retryAfter) } },
+      );
+    }
     console.error("GEN ERROR:", error);
+    const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Internal server error", detail: String(error) },
+      { error: "Internal server error", detail: msg },
       { status: 500 },
     );
   }
@@ -183,11 +250,12 @@ ${JSON.stringify(
     };
   } catch (error) {
     console.error("PLAN ARCHITECTURE ERROR:", error);
-    throw new Error(
-      `Architecture planning failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    const retryAfter = getQuotaRetryAfter(error);
+    if (retryAfter !== null) {
+      throw new QuotaExceededError(retryAfter);
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Architecture planning failed: ${msg}`);
   }
 }
 
@@ -235,10 +303,10 @@ Strict Rules:
 - Must be production-ready.
 - Must be internally consistent with other files.
 - Must follow modern best practices.
-- If package.json → include real dependencies.
-- If config file → make it realistic.
-- If env usage → use process.env properly.
-- If TypeScript → strict types.
+- If package.json -> include real dependencies.
+- If config file -> make it realistic.
+- If env usage -> use process.env properly.
+- If TypeScript -> strict types.
 - No placeholder text.
 - No pseudo-code.
 
@@ -257,18 +325,16 @@ Generate complete code now.
     }
 
     // Remove accidental markdown fences if model adds them
-    text = text
-      .replace(/```[\w]*\n?/g, "")
-      .replace(/```/g, "")
-      .trim();
+    text = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
 
     return text;
   } catch (error) {
     console.error("CODE GENERATION ERROR:", error);
-    throw new Error(
-      `Code generation failed for ${input.filePath}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    const retryAfter = getQuotaRetryAfter(error);
+    if (retryAfter !== null) {
+      throw new QuotaExceededError(retryAfter);
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Code generation failed for ${input.filePath}: ${msg}`);
   }
 }

@@ -24,6 +24,8 @@ export default function Home() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [showUpgradeNotice, setShowUpgradeNotice] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [commitStatus, setCommitStatus] = useState("Uncommitted changes");
   const [saveState, setSaveState] = useState("Unsaved");
@@ -189,6 +191,8 @@ export default function Home() {
   }, [activeTab, setActiveWorkspaceTab]);
 
   const handleGenerateCode = async () => {
+    setGenError(null);
+    setIsGenerating(true);
     try {
       console.log("🔹 Starting code generation...");
 
@@ -238,9 +242,21 @@ export default function Home() {
       console.log("📡 Response received. Status:", res.status);
 
       if (!res.ok) {
-        console.error("❌ Generation failed. Status:", res.status);
-        const errorText = await res.text().catch(() => "No error body");
-        console.error("❌ Error body:", errorText);
+        let userMessage = "Code generation failed. Please try again.";
+        try {
+          const body = await res.json();
+          if (res.status === 429) {
+            const secs = body.retryAfter ? ` Please wait ${body.retryAfter}s.` : "";
+            userMessage =
+              `⚠️ Gemini free-tier quota exhausted.${secs} ` +
+              "Upgrade your Google AI Studio plan at ai.google.dev to continue.";
+          } else if (body.error) {
+            userMessage = body.error;
+          }
+        } catch {
+          // keep default message
+        }
+        setGenError(userMessage);
         return;
       }
 
@@ -265,6 +281,9 @@ export default function Home() {
       console.log("🎉 Generation complete.");
     } catch (error) {
       console.error("🔥 Unexpected error during generation:", error);
+      setGenError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -325,6 +344,42 @@ export default function Home() {
       saveState={saveState}
       commitStatus={commitStatus}
     >
+      {/* Generation error banner */}
+      {genError && (
+        <div
+          role="alert"
+          style={{
+            background: "color-mix(in srgb, #ef4444 14%, var(--panel) 86%)",
+            borderBottom: "1px solid color-mix(in srgb, #ef4444 40%, transparent)",
+            padding: "10px 18px",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexShrink: 0,
+          }}
+        >
+          <span>{genError}</span>
+          <button
+            type="button"
+            onClick={() => setGenError(null)}
+            aria-label="Dismiss"
+            style={{
+              border: "1px solid var(--border)",
+              background: "var(--floating)",
+              color: "var(--foreground)",
+              borderRadius: 8,
+              padding: "4px 10px",
+              fontSize: 11,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* Upgrade notice banner */}
       {showUpgradeNotice && (
         <div
@@ -380,6 +435,7 @@ export default function Home() {
         creditUsed={creditUsed}
         creditLimit={creditLimit}
         creditUsedPercent={creditUsedPercent}
+        isGenerating={isGenerating}
         handleGenerateCode={handleGenerateCode}
         handleSaveChanges={handleSaveChanges}
         handleCommitChanges={handleCommitChanges}

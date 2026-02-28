@@ -20,6 +20,7 @@ type HeaderAction = {
   onClick: () => void;
   title?: string;
   highlighted?: boolean;
+  isLoading?: boolean;
 };
 
 type HeaderTabsProps = {
@@ -109,6 +110,7 @@ function HeaderActionButtons({ actions, variant }: HeaderActionButtonsProps) {
       type="button"
       onClick={action.onClick}
       title={action.title}
+      disabled={action.isLoading}
       style={
         variant === "desktop"
           ? {
@@ -116,12 +118,13 @@ function HeaderActionButtons({ actions, variant }: HeaderActionButtonsProps) {
               background: action.highlighted
                 ? "color-mix(in srgb, var(--primary) 20%, var(--panel) 80%)"
                 : "var(--floating)",
-              color: "var(--foreground)",
+              color: action.isLoading ? "var(--muted)" : "var(--foreground)",
               borderRadius: 8,
               padding: "6px 10px",
               fontSize: 12,
               fontWeight: 600,
-              cursor: "pointer",
+              cursor: action.isLoading ? "default" : "pointer",
+              opacity: action.isLoading ? 0.6 : 1,
             }
           : {
               width: "100%",
@@ -130,14 +133,15 @@ function HeaderActionButtons({ actions, variant }: HeaderActionButtonsProps) {
               background: action.highlighted
                 ? "color-mix(in srgb, var(--primary) 18%, var(--panel) 82%)"
                 : "var(--floating)",
-              color: "var(--foreground)",
+              color: action.isLoading ? "var(--muted)" : "var(--foreground)",
               padding: "7px 8px",
               fontSize: 12,
-              cursor: "pointer",
+              cursor: action.isLoading ? "default" : "pointer",
+              opacity: action.isLoading ? 0.6 : 1,
             }
       }
     >
-      {action.label}
+      {action.isLoading && action.id === "gen" ? "Generating…" : action.label}
     </button>
   ));
 }
@@ -427,6 +431,7 @@ type StudioHeaderProps = {
   creditUsed: number;
   creditLimit: number;
   creditUsedPercent: number;
+  isGenerating: boolean;
   handleGenerateCode: () => void;
   handleSaveChanges: () => void;
   handleCommitChanges: () => void;
@@ -452,6 +457,7 @@ export function StudioHeader({
   creditUsed,
   creditLimit,
   creditUsedPercent,
+  isGenerating,
   handleGenerateCode,
   handleSaveChanges,
   handleCommitChanges,
@@ -493,6 +499,7 @@ export function StudioHeader({
       id: "gen",
       label: HEADER_MENU_TEXT.genCode,
       onClick: handleGenerateCode,
+      isLoading: isGenerating,
     },
 
     {
