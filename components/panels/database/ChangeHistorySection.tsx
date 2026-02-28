@@ -110,7 +110,7 @@ export function ChangeHistorySection({
           )}
 
           {filteredHistory.length > 0 && (
-            <div style={{ display: "grid", gap: 6, maxHeight: 260, overflowY: "auto", paddingRight: 2 }}>
+            <div style={{ display: "grid", gap: 6, paddingRight: 2 }}>
               {filteredHistory.map((entry, index) => {
                 const rowId = `${entry.timestamp}-${entry.changeType}-${entry.target}-${index}`;
                 const before = entry.details?.before;
