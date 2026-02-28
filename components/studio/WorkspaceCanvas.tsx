@@ -652,16 +652,17 @@ export function WorkspaceCanvas({
           minWidth: 0,
           display: "flex",
           flexDirection: "column",
+          overflow: "hidden",
         }}
       >
         <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
           <FlowCanvas />
         </div>
         {isDatabaseWorkspace && (
-          <>
+          <div style={{ flexShrink: 0, maxHeight: "55vh", overflowY: "auto" }}>
             <DatabaseSchemaDesigner />
             <DatabaseQueryBuilder />
-          </>
+          </div>
         )}
       </main>
 
