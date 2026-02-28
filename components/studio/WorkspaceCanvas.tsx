@@ -254,50 +254,69 @@ export function WorkspaceCanvas({
             right: 10,
             display: "flex",
             justifyContent: "space-between",
-            gap: 8,
             zIndex: 26,
             pointerEvents: "none",
           }}
         >
           <button
             type="button"
+            aria-label={isLeftSidebarCollapsed ? "Open component library" : "Close component library"}
+            title={isLeftSidebarCollapsed ? "Open library" : "Close library"}
             onClick={() => {
               setIsLeftSidebarCollapsed((prev) => !prev);
               setIsInspectorCollapsed(true);
             }}
             style={{
+              width: 32,
+              height: 32,
               border: "1px solid var(--border)",
-              background: "var(--floating)",
-              color: "var(--foreground)",
+              background: isLeftSidebarCollapsed
+                ? "var(--floating)"
+                : "color-mix(in srgb, var(--primary) 18%, var(--floating) 82%)",
+              color: isLeftSidebarCollapsed ? "var(--muted)" : "var(--primary)",
               borderRadius: 8,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
+              fontSize: 16,
+              lineHeight: 1,
               cursor: "pointer",
               pointerEvents: "auto",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "var(--shadow-soft)",
+              flexShrink: 0,
             }}
           >
-            {isLeftSidebarCollapsed ? "Open library" : "Close library"}
+            ≡
           </button>
           <button
             type="button"
+            aria-label={isInspectorCollapsed ? "Open inspector" : "Close inspector"}
+            title={isInspectorCollapsed ? "Open inspector" : "Close inspector"}
             onClick={() => {
               setIsInspectorCollapsed((prev) => !prev);
               setIsLeftSidebarCollapsed(true);
             }}
             style={{
+              width: 32,
+              height: 32,
               border: "1px solid var(--border)",
-              background: "var(--floating)",
-              color: "var(--foreground)",
+              background: isInspectorCollapsed
+                ? "var(--floating)"
+                : "color-mix(in srgb, var(--primary) 18%, var(--floating) 82%)",
+              color: isInspectorCollapsed ? "var(--muted)" : "var(--primary)",
               borderRadius: 8,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
+              fontSize: 14,
+              lineHeight: 1,
               cursor: "pointer",
               pointerEvents: "auto",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "var(--shadow-soft)",
+              flexShrink: 0,
             }}
           >
-            {isInspectorCollapsed ? "Open inspector" : "Close inspector"}
+            ⊞
           </button>
         </div>
       )}
@@ -359,7 +378,7 @@ export function WorkspaceCanvas({
           </button>
 
           <aside
-            className="sidebar-scroll"
+            className="sidebar-scroll sidebar-panel"
             onWheel={(e) => {
               // Prevent canvas zoom while scrolling sidebar, but allow native scroll
               const target = e.currentTarget;
@@ -370,13 +389,14 @@ export function WorkspaceCanvas({
             }}
             style={{
               width: leftSidebarWidth,
+              maxWidth: isNarrowViewport ? "calc(100vw - 32px)" : undefined,
               flexShrink: 0,
               height: "100%",
               maxHeight: "100%",
               minHeight: 0,
               borderRight: "1px solid var(--border)",
               background: "color-mix(in srgb, var(--panel) 92%, #0b0f16 8%)",
-              paddingTop: isNarrowViewport ? 52 : 12,
+              paddingTop: isNarrowViewport ? 48 : 12,
               paddingRight: 8,
               paddingBottom: 16,
               paddingLeft: 12,
@@ -416,6 +436,7 @@ export function WorkspaceCanvas({
                   </div>
                 )}
                 <div
+                  className="sidebar-scroll"
                   style={{
                     border: "1px solid var(--border)",
                     borderRadius: 12,
@@ -423,6 +444,10 @@ export function WorkspaceCanvas({
                     padding: 8,
                     display: "grid",
                     gap: 6,
+                    maxHeight: "min(56vh, 520px)",
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                    overscrollBehaviorY: "contain",
                   }}
                 >
                   {filteredFlatItems.map((item) => (
@@ -441,6 +466,7 @@ export function WorkspaceCanvas({
                           flexDirection: "column",
                           gap: 2,
                           minWidth: 0,
+                          overflow: "hidden",
                         }}
                       >
                         <span
@@ -448,12 +474,23 @@ export function WorkspaceCanvas({
                             fontSize: 12,
                             fontFamily: item.mono ? "monospace" : "inherit",
                             lineHeight: 1.2,
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                            overflow: "hidden",
                           }}
                         >
                           {item.label}
                         </span>
                         {item.hint && (
-                          <span style={{ fontSize: 10, color: "var(--muted)" }}>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: "var(--muted)",
+                              whiteSpace: "nowrap",
+                              textOverflow: "ellipsis",
+                              overflow: "hidden",
+                            }}
+                          >
                             {item.hint}
                           </span>
                         )}
@@ -527,7 +564,18 @@ export function WorkspaceCanvas({
                     </span>
                   </div>
                   {!collapsedSections[section.id] && (
-                    <div style={{ padding: 8, display: "grid", gap: 6 }}>
+                    <div
+                      className="sidebar-scroll"
+                      style={{
+                        padding: 8,
+                        display: "grid",
+                        gap: 6,
+                        maxHeight: "min(34vh, 320px)",
+                        overflowY: "auto",
+                        overflowX: "hidden",
+                        overscrollBehaviorY: "contain",
+                      }}
+                    >
                       {section.items.map((item, index) => (
                         <div
                           key={`${section.id}-${item.kind}-${item.label}-${index}`}
@@ -544,6 +592,7 @@ export function WorkspaceCanvas({
                               flexDirection: "column",
                               gap: 2,
                               minWidth: 0,
+                              overflow: "hidden",
                             }}
                           >
                             <span
@@ -551,12 +600,23 @@ export function WorkspaceCanvas({
                                 fontSize: 12,
                                 fontFamily: item.mono ? "monospace" : "inherit",
                                 lineHeight: 1.2,
+                                whiteSpace: "nowrap",
+                                textOverflow: "ellipsis",
+                                overflow: "hidden",
                               }}
                             >
                               {item.label}
                             </span>
                             {item.hint && (
-                              <span style={{ fontSize: 10, color: "var(--muted)" }}>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  color: "var(--muted)",
+                                  whiteSpace: "nowrap",
+                                  textOverflow: "ellipsis",
+                                  overflow: "hidden",
+                                }}
+                              >
                                 {item.hint}
                               </span>
                             )}

@@ -1261,7 +1261,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                   <button
                     type="button"
                     onClick={() =>
-                      navigator.clipboard.writeText(funcLogicValue).catch(() => {})
+                      navigator.clipboard.writeText(funcLogicValue).catch(() => { })
                     }
                     style={{
                       border: "1px solid var(--border)",

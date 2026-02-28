@@ -434,6 +434,7 @@ aside {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   color: var(--secondary);
   background: transparent;
   transition:
@@ -455,4 +456,25 @@ aside {
 .sidebar-item:active {
   transform: translateY(0px);
   box-shadow: none;
+}
+
+/* ============================================
+   Sidebar Panel Slide-in (narrow viewport)
+   ============================================ */
+
+@keyframes sidebar-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar-panel {
+    animation: sidebar-slide-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
 }
