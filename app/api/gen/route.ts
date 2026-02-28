@@ -263,7 +263,7 @@ ${JSON.stringify(
       const ai = new GoogleGenAI({ apiKey: input.apiKeys[i] });
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash-lite",
         contents: prompt,
       });
       input.onRequest?.();
@@ -365,7 +365,7 @@ Generate complete code now.
       const ai = new GoogleGenAI({ apiKey: input.apiKeys[i] });
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash-lite",
         contents: prompt,
       });
       input.onRequest?.();

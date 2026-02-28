@@ -295,7 +295,7 @@ describe("POST /api/gen", () => {
     expect(Object.keys(zip.files)).toContain("index.js");
   });
 
-  it("uses the correct AI model (gemini-2.0-flash)", async () => {
+  it("uses the correct AI model (gemini-2.5-flash-lite)", async () => {
     mockGenerateContent
       .mockResolvedValueOnce(PLAN_RESPONSE)
       .mockResolvedValue({ text: "// code" });
@@ -303,7 +303,7 @@ describe("POST /api/gen", () => {
     await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
 
     for (const call of mockGenerateContent.mock.calls) {
-      expect(call[0].model).toBe("gemini-2.0-flash");
+      expect(call[0].model).toBe("gemini-2.5-flash-lite");
     }
   });
 
