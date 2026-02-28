@@ -1,0 +1,387 @@
+@import "tailwindcss";
+
+/* ============================================
+   ERMIZ Design System - Based on design-doc.md
+   ============================================ */
+
+/* Design Tokens */
+:root {
+  /* Background Layers - softer contrast */
+  --background: #0f131a;
+  --panel: #151b24;
+  --floating: #1a2230;
+
+  /* Text Colors - better legibility */
+  --foreground: #eef2f8;
+  --secondary: #c0c9d6;
+  --muted: #8d98ab;
+
+  /* Accent */
+  --primary: #87a3ff;
+  --destructive: #ff6a7a;
+
+  /* Borders and shadows */
+  --border: #273244;
+  --border-muted: #313d52;
+  --border-strong: #3a4860;
+  --shadow-soft: 0 10px 24px rgba(5, 8, 14, 0.28);
+  --shadow-float: 0 14px 28px rgba(5, 8, 14, 0.36);
+}
+
+/* Tailwind v4 Theme Extension */
+@theme inline {
+  --color-background: #0f131a;
+  --color-foreground: #eef2f8;
+  --color-panel: #151b24;
+  --color-floating: #1a2230;
+  --color-primary: #87a3ff;
+  --color-secondary: #c0c9d6;
+  --color-muted: #8d98ab;
+  --color-destructive: #ff6a7a;
+  --color-border: #273244;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(135, 163, 255, 0.1), transparent 55%),
+    radial-gradient(900px 500px at -10% 120%, rgba(94, 130, 255, 0.08), transparent 55%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+}
+
+p,
+span,
+div,
+label,
+button,
+input,
+textarea,
+select {
+  font-feature-settings: "ss01" on, "cv01" on;
+}
+
+button,
+input,
+textarea,
+select {
+  border-radius: 10px;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.08s ease;
+}
+
+button:hover {
+  border-color: var(--border-strong);
+}
+
+button:active {
+  transform: translateY(0.5px);
+}
+
+input,
+textarea,
+select {
+  border: 1px solid var(--border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+
+/* ============================================
+   React Flow Theme Overrides
+   ============================================ */
+
+.react-flow {
+  --xy-background-color: var(--background);
+  --xy-node-background-color: var(--panel);
+  --xy-node-border-color: var(--border);
+  --xy-edge-stroke: var(--muted);
+  --xy-edge-stroke-selected: var(--primary);
+  --xy-handle-background-color: var(--muted);
+  --xy-handle-border-color: var(--panel);
+  --xy-selection-background-color: rgba(124, 108, 255, 0.15);
+  --xy-controls-button-background-color: var(--floating);
+  --xy-controls-button-background-color-hover: var(--panel);
+  --xy-minimap-background-color: var(--floating);
+  --xy-minimap-mask-background-color: rgba(11, 11, 13, 0.6);
+}
+
+/* Controls Panel */
+.react-flow__controls {
+  background: var(--floating);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.react-flow__controls button {
+  background: var(--floating);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+}
+
+.react-flow__controls button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__controls button:hover {
+  background: var(--panel);
+}
+
+.react-flow__controls button svg {
+  fill: var(--foreground);
+  max-width: 14px;
+  max-height: 14px;
+}
+
+/* MiniMap */
+.react-flow__minimap {
+  background: var(--floating);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+/* Attribution */
+.react-flow__attribution {
+  background: var(--floating);
+  padding: 2px 6px;
+  border-radius: 4px 0 0 0;
+}
+
+.react-flow__attribution a {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+/* Edges */
+.react-flow__edge-path {
+  stroke: var(--muted);
+  stroke-width: 1.8;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--primary);
+  stroke-width: 2.5;
+}
+
+/* Connection Line */
+.react-flow__connection-line {
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+
+/* Handles */
+.react-flow__handle {
+  width: 11px;
+  height: 11px;
+  background: var(--muted);
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+}
+
+.react-flow__handle:hover {
+  background: var(--primary);
+}
+
+.react-flow__handle.connecting {
+  background: var(--primary);
+}
+
+.react-flow__handle.valid {
+  background: #22c55e;
+}
+
+/* Background Grid */
+.react-flow__background pattern circle {
+  fill: rgba(141, 152, 171, 0.3);
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-muted);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-muted) var(--background);
+}
+
+/* Enhanced scrollbar for sidebars */
+aside::-webkit-scrollbar {
+  width: 10px;
+}
+
+aside::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+aside::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+aside::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+aside {
+  scrollbar-width: auto;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ============================================
+   Focus & Selection States
+   ============================================ */
+
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.no-focus-ring:focus-visible {
+  outline: none;
+}
+
+::selection {
+  background: rgba(124, 108, 255, 0.35);
+  color: var(--foreground);
+}
+
+/* ============================================
+   Custom Node Styles (Override for reliability)
+   ============================================ */
+
+.ermiz-node {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 200px;
+  box-shadow: var(--shadow-soft);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.ermiz-node:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.ermiz-node.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), var(--shadow-float);
+}
+
+.ermiz-node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ermiz-node-type {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+}
+
+.ermiz-node-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ermiz-node-body {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--secondary);
+  min-height: 40px;
+  position: relative;
+}
+
+.ermiz-node-footer {
+  padding: 6px 12px;
+  font-size: 10px;
+  color: var(--muted);
+  background: rgba(22, 29, 40, 0.5);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 9px 9px;
+}
+
+/* ============================================
+   Panel Styles (Fallback)
+   ============================================ */
+
+.ermiz-panel {
+  background: var(--panel);
+  border-color: var(--border);
+}
+
+.ermiz-floating {
+  background: var(--floating);
+}
+
+/* Trigger Node Special Styling */
+.ermiz-node.trigger-accent {
+  border-left: 4px solid var(--primary);
+}
