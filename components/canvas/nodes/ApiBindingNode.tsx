@@ -1,8 +1,9 @@
 import React, { memo } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import { ApiBinding, InputField, OutputField } from "@/lib/schema/node";
+import { useStore } from "@/store/useStore";
 
-export const ApiBindingNode = memo(({ data, selected }: NodeProps) => {
+export const ApiBindingNode = memo(({ id: nodeId, data, selected }: NodeProps) => {
   const apiData = data as unknown as ApiBinding;
   const protocol =
     apiData.protocol ?? (apiData.apiType === "asyncapi" ? "ws" : "rest");
@@ -90,6 +91,9 @@ export const ApiBindingNode = memo(({ data, selected }: NodeProps) => {
     oauth2: "🔐",
     basic: "👤",
   };
+
+  const openApiTableModal = useStore((s) => s.openApiTableModal);
+  const tables = apiData.tables ?? [];
 
   const hasRequestBody = Boolean(apiData.request?.body?.schema?.length);
   const hasQueryParams = Boolean(apiData.request?.queryParams?.length);
@@ -595,6 +599,62 @@ export const ApiBindingNode = memo(({ data, selected }: NodeProps) => {
           >
             CORS ✓
           </div>
+        )}
+      </div>
+
+      {/* Data Tables */}
+      <div style={{ padding: "8px 12px", borderTop: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase" }}>
+            Data Tables
+          </span>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); openApiTableModal(nodeId); }}
+            style={{
+              fontSize: 10,
+              padding: "2px 7px",
+              background: "var(--background)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--muted)",
+              cursor: "pointer",
+            }}
+          >
+            + Add / Edit
+          </button>
+        </div>
+        {tables.length === 0 ? (
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>(no tables)</span>
+        ) : (
+          <>
+            {tables.slice(0, 3).map((t) => (
+              <div
+                key={t.id ?? t.name}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  fontSize: 11,
+                  color: "var(--foreground)",
+                  padding: "2px 0",
+                }}
+              >
+                <span>▤ {t.name}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ color: "var(--muted)" }}>{t.fields.length} cols</span>
+                  {apiData.linkedDbNodeId && (
+                    <span title="Synced to DB" style={{ fontSize: 10 }}>🔗</span>
+                  )}
+                </span>
+              </div>
+            ))}
+            {tables.length > 3 && (
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                +{tables.length - 3} more
+              </div>
+            )}
+          </>
         )}
       </div>
 

@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo, useState, useCallback } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import { DatabaseBlock } from "@/lib/schema/node";
 import { estimateDatabaseMonthlyCost } from "@/lib/cost-estimator";
@@ -10,6 +10,8 @@ export const DatabaseNode = memo(({ id, data, selected }: NodeProps) => {
   const dbData = data as unknown as DatabaseBlock;
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
+  const updateNodeData = useStore((state) => state.updateNodeData);
+  const [expandedTables, setExpandedTables] = useState<Record<number, boolean>>({});
   const dbConnectionSummary = useMemo(() => {
     const analysis = analyzeDBConnections({
       nodes: nodes as Array<{
@@ -125,6 +127,43 @@ export const DatabaseNode = memo(({ id, data, selected }: NodeProps) => {
       Boolean(environmentData.overrides?.enabled);
     return count + (isConfigured ? 1 : 0);
   }, 0);
+
+  const tables = dbData.tables || [];
+  const relationships = dbData.relationships || [];
+
+  const handleAddTable = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const newName = `table_${tables.length + 1}`;
+      updateNodeData(id, {
+        tables: [...tables, { name: newName, fields: [], indexes: [] }],
+        schemas: [...tables.map((t) => t.name), newName].filter(Boolean),
+      } as Partial<DatabaseBlock>);
+    },
+    [id, tables, updateNodeData],
+  );
+
+  const handleAddField = useCallback(
+    (e: React.MouseEvent, tableIndex: number) => {
+      e.stopPropagation();
+      const updated = [...tables];
+      const fields = [...(updated[tableIndex].fields || [])];
+      fields.push({
+        name: `field_${fields.length + 1}`,
+        type: "string",
+        nullable: true,
+        isPrimaryKey: false,
+        isForeignKey: false,
+      });
+      updated[tableIndex] = { ...updated[tableIndex], fields };
+      updateNodeData(id, { tables: updated } as Partial<DatabaseBlock>);
+    },
+    [id, tables, updateNodeData],
+  );
+
+  const toggleTableExpand = useCallback((index: number) => {
+    setExpandedTables((prev) => ({ ...prev, [index]: !prev[index] }));
+  }, []);
 
   return (
     <div
@@ -329,32 +368,245 @@ export const DatabaseNode = memo(({ id, data, selected }: NodeProps) => {
         </div>
       )}
 
-      {/* Schemas */}
-      {dbData.schemas.length > 0 && (
+      {/* Tables */}
+      <div
+        style={{
+          padding: "8px 12px",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: tables.length > 0 ? 6 : 0,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              color: "var(--muted)",
+              textTransform: "uppercase",
+            }}
+          >
+            Tables ({tables.length})
+          </div>
+          <button
+            type="button"
+            onClick={handleAddTable}
+            style={{
+              border: "1px solid var(--border)",
+              background: "var(--floating)",
+              color: "var(--foreground)",
+              borderRadius: 4,
+              padding: "2px 6px",
+              fontSize: 9,
+              cursor: "pointer",
+            }}
+          >
+            + Add
+          </button>
+        </div>
+
+        {tables.length === 0 && (
+          <div style={{ fontSize: 10, color: "var(--muted)", fontStyle: "italic" }}>
+            No tables defined yet
+          </div>
+        )}
+
+        <div style={{ maxHeight: 220, overflowY: tables.length > 3 ? "auto" : "visible" }}>
+          {tables.map((table, i) => {
+            const isExpanded = expandedTables[i] ?? false;
+            const fields = table.fields || [];
+            const pkFields = fields.filter((f) => f.isPrimaryKey);
+            const fkFields = fields.filter((f) => f.isForeignKey);
+            return (
+              <div
+                key={table.id || `${table.name}-${i}`}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  background: "var(--floating)",
+                  marginBottom: 4,
+                }}
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTableExpand(i)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") toggleTableExpand(i);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                    fontSize: 11,
+                  }}
+                >
+                  <span style={{ fontSize: 9, color: "var(--muted)" }}>
+                    {isExpanded ? "▾" : "▸"}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      color: "var(--foreground)",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {table.name || "unnamed"}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: 9,
+                      color: "var(--muted)",
+                    }}
+                  >
+                    {fields.length} col{fields.length !== 1 ? "s" : ""}
+                  </span>
+                  {pkFields.length > 0 && <span style={{ fontSize: 9 }}>🔑</span>}
+                  {fkFields.length > 0 && <span style={{ fontSize: 9 }}>🔗</span>}
+                </div>
+                {isExpanded && (
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--border)",
+                      padding: "4px 8px",
+                    }}
+                  >
+                    {fields.length === 0 && (
+                      <div
+                        style={{
+                          fontSize: 9,
+                          color: "var(--muted)",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        No fields
+                      </div>
+                    )}
+                    {fields.map((field, j) => (
+                      <div
+                        key={field.id || `${field.name}-${j}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 10,
+                          color: "var(--secondary)",
+                          padding: "1px 0",
+                        }}
+                      >
+                        {field.isPrimaryKey && (
+                          <span style={{ fontSize: 8 }}>🔑</span>
+                        )}
+                        {field.isForeignKey && (
+                          <span style={{ fontSize: 8 }}>🔗</span>
+                        )}
+                        <span style={{ fontFamily: "monospace" }}>
+                          {field.name}
+                        </span>
+                        <span style={{ color: "var(--muted)" }}>:</span>
+                        <span
+                          style={{
+                            color:
+                              engineColors[dbData.engine || ""] ||
+                              "var(--primary)",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {field.type}
+                        </span>
+                        {field.nullable === false && (
+                          <span style={{ fontSize: 8, color: "#ef4444" }}>
+                            *
+                          </span>
+                        )}
+                        {field.unique && (
+                          <span style={{ fontSize: 7, color: "var(--muted)" }}>
+                            UQ
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={(e) => handleAddField(e, i)}
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: "transparent",
+                        color: "var(--muted)",
+                        borderRadius: 3,
+                        padding: "1px 5px",
+                        fontSize: 9,
+                        cursor: "pointer",
+                        marginTop: 3,
+                      }}
+                    >
+                      + Field
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Relationships */}
+      {relationships.length > 0 && (
         <div style={{ padding: "8px 12px" }}>
           <div
             style={{
               fontSize: 10,
               color: "var(--muted)",
-              marginBottom: 6,
               textTransform: "uppercase",
+              marginBottom: 6,
             }}
           >
-            Schemas
+            Relations ({relationships.length})
           </div>
-          {dbData.schemas.map((schema, i) => (
-            <div
-              key={i}
-              style={{
-                fontSize: 11,
-                color: "var(--secondary)",
-                fontFamily: "monospace",
-                marginBottom: 2,
-              }}
-            >
-              📋 {schema}
-            </div>
-          ))}
+          {relationships.map((rel, i) => {
+            const fromTable = tables.find(
+              (t) => t.id === rel.fromTableId || t.name === rel.fromTableId,
+            );
+            const toTable = tables.find(
+              (t) => t.id === rel.toTableId || t.name === rel.toTableId,
+            );
+            return (
+              <div
+                key={rel.id || i}
+                style={{
+                  fontSize: 10,
+                  color: "var(--secondary)",
+                  fontFamily: "monospace",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  marginBottom: 2,
+                }}
+              >
+                <span>{fromTable?.name || rel.fromTableId}</span>
+                <span style={{ color: "var(--muted)" }}>→</span>
+                <span>{toTable?.name || rel.toTableId}</span>
+                <span
+                  style={{
+                    fontSize: 8,
+                    color: "var(--muted)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 3,
+                    padding: "0 3px",
+                  }}
+                >
+                  {rel.type}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

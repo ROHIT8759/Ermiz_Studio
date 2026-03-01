@@ -7,6 +7,7 @@ import { StudioLayout } from "@/components/studio/StudioLayout";
 import { StudioWorkspace } from "@/components/studio/StudioWorkspace";
 import { TestPanel } from "@/components/studio/TestPanel";
 import { GenCodeModal } from "@/components/studio/GenCodeModal";
+import { ApiTableModal } from "@/components/studio/ApiTableModal";
 import { validateArchitecture, ValidationResult } from "@/lib/validate-architecture";
 import {
   STORAGE_KEYS,
@@ -19,6 +20,8 @@ import { useStore } from "@/store/useStore";
 export default function Home() {
   const router = useRouter();
   const setActiveWorkspaceTab = useStore((state) => state.setActiveTab);
+  const apiTableModalNodeId = useStore((state) => state.apiTableModalNodeId);
+  const closeApiTableModal = useStore((state) => state.closeApiTableModal);
   const loadGraphPreset = useStore((state) => state.loadGraphPreset);
   const exportGraphs = useStore((state) => state.exportGraphs);
   const importGraphs = useStore((state) => state.importGraphs);
@@ -629,6 +632,14 @@ export default function Home() {
           validationResult={validationResult}
           onConfirm={handleGenerateCode}
           onCancel={() => { setIsGenModalOpen(false); setValidationResult(null); }}
+        />
+      )}
+
+      {/* ── API Table Designer Modal ───────────────────────────────────── */}
+      {apiTableModalNodeId && (
+        <ApiTableModal
+          nodeId={apiTableModalNodeId}
+          onClose={closeApiTableModal}
         />
       )}
     </StudioLayout>

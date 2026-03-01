@@ -700,7 +700,7 @@ export function DatabaseSchemaDesigner() {
                 </svg>
                 {graphLayout.map((table) => (
                   <div
-                    key={table.id}
+                    key={table.id ?? table.label}
                     style={{
                       position: "absolute",
                       left: table.x - 55,
