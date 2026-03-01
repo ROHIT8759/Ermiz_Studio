@@ -103,9 +103,12 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+type GenLanguage = "javascript" | "python";
+
 interface GenRequestBody {
   nodes: Node[];
   edges: Edge[];
+  language?: GenLanguage;
   techStack?: {
     frontend?: string;
     backend?: string;
@@ -138,6 +141,8 @@ export async function POST(req: NextRequest) {
     // parallel genCodeAi calls skip already-dead keys immediately.
     const exhaustedKeys = new Set<number>();
 
+    const language: GenLanguage = body.language === "python" ? "python" : "javascript";
+
     // 1) Plan architecture
     let geminiCallCount = 0;
     const architecturePlan = await planArchitectureAi({
@@ -145,6 +150,7 @@ export async function POST(req: NextRequest) {
       edges: body.edges,
       techStack: body.techStack,
       metadata: body.metadata,
+      language,
       apiKeys,
       exhaustedKeys,
       onRequest: () => { geminiCallCount++; },
@@ -170,6 +176,7 @@ export async function POST(req: NextRequest) {
           filePath: file.path,
           description: file.description,
           fullPlan: architecturePlan,
+          language,
           apiKeys,
           exhaustedKeys,
           startKeyIndex: idx % apiKeys.length, // round-robin starting key
@@ -228,6 +235,7 @@ async function planArchitectureAi(input: {
   edges: unknown[];
   techStack?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  language: GenLanguage;
   apiKeys: string[];
   exhaustedKeys: Set<number>;
   onRequest?: () => void;
@@ -236,6 +244,23 @@ async function planArchitectureAi(input: {
   description: string;
   files: { path: string; description: string }[];
 }> {
+  const langSpec =
+    input.language === "python"
+      ? `
+Language: Python 3.12+
+Framework: FastAPI
+Package management: pip with requirements.txt AND pyproject.toml
+File extensions: .py
+Include: requirements.txt, pyproject.toml, Dockerfile, .env.example, README.md
+`
+      : `
+Language: JavaScript / TypeScript
+Framework: Express (Node.js)
+Package management: npm with package.json
+File extensions: .ts or .js
+Include: package.json, tsconfig.json (if TS), Dockerfile, .env.example, README.md
+`;
+
   const prompt = `
 You are a senior software architect.
 
@@ -243,13 +268,15 @@ Your task:
 Generate a COMPLETE production-ready backend project file structure
 based on the provided architecture graph.
 
+${langSpec}
+
 Requirements:
 - Plan exact folders and files.
 - Include config files.
 - Include environment setup.
 - Include database setup if needed.
 - Include Docker if appropriate.
-- Include package.json.
+- Include the appropriate package manifest for the language.
 - Include README.
 - Be realistic and production-grade.
 - Every file must have a VERY DETAILED description of what it does.
@@ -346,6 +373,7 @@ async function genCodeAi(input: {
     description: string;
     files: { path: string; description: string }[];
   };
+  language: GenLanguage;
   apiKeys: string[];
   exhaustedKeys: Set<number>;
   /** Index of the preferred starting key (round-robin assignment). */
@@ -357,6 +385,25 @@ async function genCodeAi(input: {
   if (emptyFilePatterns.some((p) => p.test(input.filePath))) {
     return "";
   }
+
+  const langRules =
+    input.language === "python"
+      ? `
+- Language: Python 3.12+.
+- Use type hints everywhere.
+- Follow PEP 8 style.
+- Use async/await with FastAPI.
+- If requirements.txt -> include real packages with versions.
+- If pyproject.toml -> include build system config.
+- If env usage -> use os.environ or pydantic Settings.
+`
+      : `
+- Language: JavaScript / TypeScript.
+- If package.json -> include real dependencies.
+- If config file -> make it realistic.
+- If env usage -> use process.env properly.
+- If TypeScript -> strict types.
+`;
 
   const prompt = `
 You are a senior software engineer.
@@ -387,10 +434,7 @@ Strict Rules:
 - Must be production-ready.
 - Must be internally consistent with other files.
 - Must follow modern best practices.
-- If package.json -> include real dependencies.
-- If config file -> make it realistic.
-- If env usage -> use process.env properly.
-- If TypeScript -> strict types.
+${langRules}
 - No placeholder text.
 - No pseudo-code.
 

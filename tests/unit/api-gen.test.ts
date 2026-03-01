@@ -203,6 +203,77 @@ describe("POST /api/gen", () => {
     expect(firstCallArg.contents).toContain("backend");
   });
 
+  // ── language parameter ────────────────────────────────────────────────────
+
+  it("generates Python/FastAPI plan when language is 'python'", async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(PLAN_RESPONSE)
+      .mockResolvedValue(CODE_RESPONSE("src/main.py"));
+
+    const res = await POST(
+      makeRequest({
+        nodes: VALID_NODES,
+        edges: VALID_EDGES,
+        language: "python",
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    // Plan prompt should mention Python / FastAPI
+    const planPrompt = mockGenerateContent.mock.calls[0][0].contents;
+    expect(planPrompt).toContain("Python");
+    expect(planPrompt).toContain("FastAPI");
+  });
+
+  it("generates JS/Express plan when language is 'javascript'", async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(PLAN_RESPONSE)
+      .mockResolvedValue(CODE_RESPONSE("src/index.ts"));
+
+    const res = await POST(
+      makeRequest({
+        nodes: VALID_NODES,
+        edges: VALID_EDGES,
+        language: "javascript",
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    const planPrompt = mockGenerateContent.mock.calls[0][0].contents;
+    expect(planPrompt).toContain("Express");
+    expect(planPrompt).toContain("JavaScript");
+  });
+
+  it("defaults to javascript when no language is provided", async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(PLAN_RESPONSE)
+      .mockResolvedValue(CODE_RESPONSE("src/index.ts"));
+
+    await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
+
+    const planPrompt = mockGenerateContent.mock.calls[0][0].contents;
+    expect(planPrompt).toContain("Express");
+  });
+
+  it("uses Python-specific rules in code gen prompt", async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(PLAN_RESPONSE)
+      .mockResolvedValue(CODE_RESPONSE("src/main.py"));
+
+    await POST(
+      makeRequest({
+        nodes: VALID_NODES,
+        edges: VALID_EDGES,
+        language: "python",
+      }),
+    );
+
+    // Second call onward is code gen — check it has Python rules
+    const codePrompt = mockGenerateContent.mock.calls[1][0].contents;
+    expect(codePrompt).toContain("Python");
+    expect(codePrompt).toContain("PEP 8");
+  });
+
   it("caps file generation at 20 files", async () => {
     const manyFiles = Array.from({ length: 30 }, (_, i) => ({
       path: `src/file${i}.ts`,

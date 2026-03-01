@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StudioHeader, StudioUser } from "@/components/studio/StudioHeader";
 import { StudioLayout } from "@/components/studio/StudioLayout";
 import { StudioWorkspace } from "@/components/studio/StudioWorkspace";
 import { TestPanel } from "@/components/studio/TestPanel";
+import { validateArchitecture, ValidationResult } from "@/lib/validate-architecture";
 import {
   STORAGE_KEYS,
   STATUS_TEXT_BY_TAB,
@@ -31,6 +32,8 @@ export default function Home() {
   const retryCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [genStats, setGenStats] = useState<{ requests: number; files: number; time: string } | null>(null);
   const [isTestOpen, setIsTestOpen] = useState(false);
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [commitStatus, setCommitStatus] = useState("Uncommitted changes");
   const [saveState, setSaveState] = useState("Unsaved");
@@ -211,7 +214,23 @@ export default function Home() {
     }
   }, [retryCountdown]);
 
-  const handleGenerateCode = async () => {
+  // Validate-then-prompt: runs checks, shows picker if valid.
+  const handleGenerateCodeClick = useCallback(() => {
+    const graphs = exportGraphs();
+    const result = validateArchitecture(graphs);
+    setValidationResult(result);
+
+    if (!result.ok) {
+      // Errors found — don't show picker, the validation modal will appear
+      return;
+    }
+    // Passed (maybe with warnings) — show language picker
+    setShowLanguagePicker(true);
+  }, [exportGraphs]);
+
+  const handleGenerateCode = async (language: "javascript" | "python" = "javascript") => {
+    setShowLanguagePicker(false);
+    setValidationResult(null);
     setGenError(null);
     setRetryCountdown(null);
     if (retryCountdownRef.current) {
@@ -232,17 +251,19 @@ export default function Home() {
       console.log("🧩 Total Nodes:", allNodes.length);
       console.log("🔗 Total Edges:", alleges.length);
 
-      // Hardcoded tech stack + metadata
+      const isJs = language === "javascript";
+
+      // Tech stack + metadata adapted to chosen language
       const techStack = {
         frontend: "none",
-        backend: "node",
+        backend: isJs ? "node" : "python",
         database: "postgresql",
         deployment: "docker",
       };
 
       const metadata = {
-        language: "javaScript",
-        framework: "node.js",
+        language: isJs ? "javascript" : "python",
+        framework: isJs ? "express" : "fastapi",
         architectureStyle: "monolithic",
         generatedBy: "ermiz-studio",
       };
@@ -255,6 +276,7 @@ export default function Home() {
         edges: alleges,
         techStack,
         metadata,
+        language,
       };
 
       console.log("JSON PAYLOAD EXPORT:\n" + JSON.stringify(requestPayload, null, 2));
@@ -340,7 +362,7 @@ export default function Home() {
     }
   };
   // Keep the ref always pointing to the latest version so the interval can call it.
-  handleGenerateCodeRef.current = handleGenerateCode;
+  handleGenerateCodeRef.current = () => handleGenerateCode();
 
   const handleRunTest = () => setIsTestOpen(true);
 
@@ -578,7 +600,7 @@ export default function Home() {
         creditLimit={creditLimit}
         creditUsedPercent={creditUsedPercent}
         isGenerating={isGenerating}
-        handleGenerateCode={handleGenerateCode}
+        handleGenerateCode={handleGenerateCodeClick}
         handleRunTest={handleRunTest}
         handleSaveChanges={handleSaveChanges}
         handleCommitChanges={handleCommitChanges}
@@ -606,6 +628,220 @@ export default function Home() {
         isOpen={isTestOpen}
         onClose={() => setIsTestOpen(false)}
       />
+
+      {/* ── Validation Issues Modal ──────────────────────────────────── */}
+      {validationResult && !validationResult.ok && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "grid",
+            placeItems: "center",
+            background: "rgba(0,0,0,0.55)",
+          }}
+          onClick={() => setValidationResult(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+              padding: "22px 24px",
+              maxWidth: 520,
+              width: "90vw",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 12px", fontSize: 15, color: "#ef4444" }}>
+              ⚠ Architecture Validation Failed
+            </h3>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 14px" }}>
+              Fix these issues before generating code:
+            </p>
+            {validationResult.errors.map((issue, i) => (
+              <div
+                key={`err-${i}`}
+                style={{
+                  background: "color-mix(in srgb, #ef4444 8%, var(--floating) 92%)",
+                  border: "1px solid color-mix(in srgb, #ef4444 25%, var(--border) 75%)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  marginBottom: 6,
+                  fontSize: 12,
+                }}
+              >
+                <strong style={{ color: "#ef4444" }}>✕</strong> {issue.title}
+                {issue.detail && (
+                  <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 3 }}>{issue.detail}</div>
+                )}
+              </div>
+            ))}
+            {validationResult.warnings.length > 0 && (
+              <>
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: "12px 0 8px" }}>Warnings:</p>
+                {validationResult.warnings.map((issue, i) => (
+                  <div
+                    key={`warn-${i}`}
+                    style={{
+                      background: "color-mix(in srgb, #f59e0b 6%, var(--floating) 94%)",
+                      border: "1px solid color-mix(in srgb, #f59e0b 20%, var(--border) 80%)",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                      marginBottom: 6,
+                      fontSize: 12,
+                    }}
+                  >
+                    <strong style={{ color: "#f59e0b" }}>⚡</strong> {issue.title}
+                    {issue.detail && (
+                      <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 3 }}>{issue.detail}</div>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+              <button
+                type="button"
+                onClick={() => setValidationResult(null)}
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--floating)",
+                  color: "var(--foreground)",
+                  borderRadius: 8,
+                  padding: "7px 16px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Language Picker Modal ────────────────────────────────────── */}
+      {showLanguagePicker && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "grid",
+            placeItems: "center",
+            background: "rgba(0,0,0,0.55)",
+          }}
+          onClick={() => setShowLanguagePicker(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+              padding: "24px 28px",
+              maxWidth: 420,
+              width: "88vw",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>Generate Code</h3>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
+              Choose the language for your generated project:
+            </p>
+            {/* Show warnings inline if any */}
+            {validationResult && validationResult.warnings.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                {validationResult.warnings.map((w, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      background: "color-mix(in srgb, #f59e0b 6%, var(--floating) 94%)",
+                      border: "1px solid color-mix(in srgb, #f59e0b 20%, var(--border) 80%)",
+                      borderRadius: 8,
+                      padding: "6px 10px",
+                      marginBottom: 4,
+                      fontSize: 11,
+                      color: "var(--muted)",
+                    }}
+                  >
+                    <strong style={{ color: "#f59e0b" }}>⚡</strong> {w.title}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => handleGenerateCode("javascript")}
+                style={{
+                  flex: 1,
+                  border: "1px solid var(--border)",
+                  background: "color-mix(in srgb, #f7df1e 10%, var(--floating) 90%)",
+                  color: "var(--foreground)",
+                  borderRadius: 10,
+                  padding: "14px 10px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 28 }}>🟨</span>
+                JavaScript
+                <span style={{ fontSize: 10, fontWeight: 400, color: "var(--muted)" }}>Node.js + Express</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGenerateCode("python")}
+                style={{
+                  flex: 1,
+                  border: "1px solid var(--border)",
+                  background: "color-mix(in srgb, #3776ab 10%, var(--floating) 90%)",
+                  color: "var(--foreground)",
+                  borderRadius: 10,
+                  padding: "14px 10px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 28 }}>🐍</span>
+                Python
+                <span style={{ fontSize: 10, fontWeight: 400, color: "var(--muted)" }}>FastAPI</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowLanguagePicker(false)}
+              style={{
+                width: "100%",
+                marginTop: 10,
+                border: "none",
+                background: "transparent",
+                color: "var(--muted)",
+                fontSize: 11,
+                cursor: "pointer",
+                padding: "6px 0",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </StudioLayout>
   );
 }
