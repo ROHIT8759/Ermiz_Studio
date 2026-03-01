@@ -370,8 +370,8 @@ export function DatabaseSchemaDesigner() {
         background: "color-mix(in srgb, var(--panel) 94%, #0c111a 6%)",
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-        minHeight: 320,
-        maxHeight: "32vh",
+        height: "100%",
+        minHeight: 0,
       }}
     >
       <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>

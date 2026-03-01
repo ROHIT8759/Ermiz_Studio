@@ -15,14 +15,22 @@ const STORAGE_KEYS = {
   rightSidebarCollapsed: "ermiz.rightSidebarCollapsed",
   leftSidebarWidth: "ermiz.leftSidebarWidth",
   inspectorWidth: "ermiz.inspectorWidth",
+  dbPanelHeight: "ermiz.dbPanelHeight",
+  dbSplitRatio: "ermiz.dbSplitRatio",
 };
 
 const DEFAULT_LEFT_WIDTH = 236;
 const DEFAULT_INSPECTOR_WIDTH = 320;
+const DEFAULT_DB_PANEL_HEIGHT = 340;
+const DEFAULT_DB_SPLIT_RATIO = 0.55; // schema designer gets 55%
 const clampLeftWidth = (value: number) =>
   Math.max(200, Math.min(420, value || DEFAULT_LEFT_WIDTH));
 const clampInspectorWidth = (value: number) =>
   Math.max(260, Math.min(520, value || DEFAULT_INSPECTOR_WIDTH));
+const clampDbHeight = (value: number) =>
+  Math.max(120, Math.min(window.innerHeight * 0.75, value || DEFAULT_DB_PANEL_HEIGHT));
+const clampSplitRatio = (value: number) =>
+  Math.max(0.2, Math.min(0.8, value || DEFAULT_DB_SPLIT_RATIO));
 
 export type SidebarItem = {
   kind: NodeKind;
@@ -60,14 +68,22 @@ export function WorkspaceCanvas({
   const [isNarrowViewport, setIsNarrowViewport] = useState(false);
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_WIDTH);
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
+  const [dbPanelHeight, setDbPanelHeight] = useState(DEFAULT_DB_PANEL_HEIGHT);
+  const [dbSplitRatio, setDbSplitRatio] = useState(DEFAULT_DB_SPLIT_RATIO);
   const resizeStateRef = useRef<{
-    side: "left" | "right" | null;
+    side: "left" | "right" | "dbHeight" | "dbSplit" | null;
     startX: number;
+    startY: number;
     startWidth: number;
+    startHeight: number;
+    startRatio: number;
   }>({
     side: null,
     startX: 0,
+    startY: 0,
     startWidth: 0,
+    startHeight: 0,
+    startRatio: 0,
   });
 
   const sidebarItemStyle: React.CSSProperties = {
@@ -116,12 +132,22 @@ export function WorkspaceCanvas({
       const nextInspectorWidth = storedInspectorWidth
         ? clampInspectorWidth(storedInspectorWidth)
         : DEFAULT_INSPECTOR_WIDTH;
+      const storedDbHeight = Number(localStorage.getItem(STORAGE_KEYS.dbPanelHeight));
+      const nextDbHeight = storedDbHeight
+        ? clampDbHeight(storedDbHeight)
+        : DEFAULT_DB_PANEL_HEIGHT;
+      const storedDbSplit = Number(localStorage.getItem(STORAGE_KEYS.dbSplitRatio));
+      const nextDbSplit = storedDbSplit
+        ? clampSplitRatio(storedDbSplit)
+        : DEFAULT_DB_SPLIT_RATIO;
 
       const frame = window.requestAnimationFrame(() => {
         setIsLeftSidebarCollapsed(nextLeftCollapsed);
         setIsInspectorCollapsed(nextInspectorCollapsed);
         setLeftSidebarWidth(nextLeftWidth);
         setInspectorWidth(nextInspectorWidth);
+        setDbPanelHeight(nextDbHeight);
+        setDbSplitRatio(nextDbSplit);
       });
 
       return () => {
@@ -138,13 +164,35 @@ export function WorkspaceCanvas({
       if (state.side === "left") {
         const nextWidth = Math.max(200, Math.min(420, state.startWidth + (event.clientX - state.startX)));
         setLeftSidebarWidth(nextWidth);
-      } else {
+      } else if (state.side === "right") {
         const nextWidth = Math.max(260, Math.min(520, state.startWidth + (state.startX - event.clientX)));
         setInspectorWidth(nextWidth);
+      } else if (state.side === "dbHeight") {
+        // Drag upward = increase DB panel height
+        const deltaY = state.startY - event.clientY;
+        const nextHeight = Math.max(120, Math.min(window.innerHeight * 0.75, state.startHeight + deltaY));
+        setDbPanelHeight(nextHeight);
+      } else if (state.side === "dbSplit") {
+        // Drag within the DB panel to adjust split
+        const deltaY = event.clientY - state.startY;
+        const totalH = state.startHeight;
+        const nextRatio = Math.max(0.2, Math.min(0.8, state.startRatio + deltaY / totalH));
+        setDbSplitRatio(nextRatio);
       }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (event: MouseEvent) => {
+      const state = resizeStateRef.current;
+      // Persist DB panel sizes — recompute final value from ref to avoid stale closure
+      if (state.side === "dbHeight") {
+        const deltaY = state.startY - event.clientY;
+        const finalH = Math.max(120, Math.min(window.innerHeight * 0.75, state.startHeight + deltaY));
+        try { localStorage.setItem(STORAGE_KEYS.dbPanelHeight, String(finalH)); } catch { /* ignore */ }
+      } else if (state.side === "dbSplit") {
+        const deltaY = event.clientY - state.startY;
+        const finalR = Math.max(0.2, Math.min(0.8, state.startRatio + deltaY / state.startHeight));
+        try { localStorage.setItem(STORAGE_KEYS.dbSplitRatio, String(finalR)); } catch { /* ignore */ }
+      }
       resizeStateRef.current.side = null;
     };
 
@@ -630,7 +678,10 @@ export function WorkspaceCanvas({
             resizeStateRef.current = {
               side: "left",
               startX: event.clientX,
+              startY: 0,
               startWidth: leftSidebarWidth,
+              startHeight: 0,
+              startRatio: 0,
             };
           }}
           style={{
@@ -659,10 +710,68 @@ export function WorkspaceCanvas({
           <FlowCanvas />
         </div>
         {isDatabaseWorkspace && (
-          <div style={{ flexShrink: 0, maxHeight: "55vh", overflowY: "auto" }}>
-            <DatabaseSchemaDesigner />
-            <DatabaseQueryBuilder />
-          </div>
+          <>
+            {/* ── Vertical resize handle: canvas ↔ DB panels ──────── */}
+            <div
+              onMouseDown={(event) => {
+                resizeStateRef.current = {
+                  side: "dbHeight",
+                  startX: 0,
+                  startY: event.clientY,
+                  startWidth: 0,
+                  startHeight: dbPanelHeight,
+                  startRatio: 0,
+                };
+              }}
+              style={{
+                height: 6,
+                cursor: "row-resize",
+                flexShrink: 0,
+                background: "transparent",
+                borderTop: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+                position: "relative",
+                zIndex: 2,
+              }}
+              title="Drag to resize database panels"
+            />
+            <div
+              style={{
+                flexShrink: 0,
+                height: dbPanelHeight,
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ flex: dbSplitRatio, minHeight: 0, overflow: "auto" }}>
+                <DatabaseSchemaDesigner />
+              </div>
+              {/* ── Horizontal resize handle: schema ↔ query ────── */}
+              <div
+                onMouseDown={(event) => {
+                  resizeStateRef.current = {
+                    side: "dbSplit",
+                    startX: 0,
+                    startY: event.clientY,
+                    startWidth: 0,
+                    startHeight: dbPanelHeight,
+                    startRatio: dbSplitRatio,
+                  };
+                }}
+                style={{
+                  height: 6,
+                  cursor: "row-resize",
+                  flexShrink: 0,
+                  background: "transparent",
+                  borderTop: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+                }}
+                title="Drag to resize split between panels"
+              />
+              <div style={{ flex: 1 - dbSplitRatio, minHeight: 0, overflow: "auto" }}>
+                <DatabaseQueryBuilder />
+              </div>
+            </div>
+          </>
         )}
       </main>
 
@@ -701,7 +810,10 @@ export function WorkspaceCanvas({
               resizeStateRef.current = {
                 side: "right",
                 startX: event.clientX,
+                startY: 0,
                 startWidth: inspectorWidth,
+                startHeight: 0,
+                startRatio: 0,
               };
             }}
             style={{

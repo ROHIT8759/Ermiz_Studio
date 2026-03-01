@@ -287,8 +287,8 @@ export function DatabaseQueryBuilder() {
       style={{
         borderTop: "1px solid var(--border)",
         background: "color-mix(in srgb, var(--panel) 95%, #0c111a 5%)",
-        maxHeight: "30vh",
-        minHeight: 220,
+        height: "100%",
+        minHeight: 0,
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
       }}
