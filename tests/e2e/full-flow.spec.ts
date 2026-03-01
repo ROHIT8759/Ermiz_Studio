@@ -56,6 +56,8 @@ const buildFullFlowGraph = (
             rateLimit: { enabled: false, requests: 100, window: "minute" },
             version: "1.0.0",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "process-validate-order",
           },
         },

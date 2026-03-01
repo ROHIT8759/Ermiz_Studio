@@ -20,6 +20,8 @@ import {
   ProcessDefinition,
   ProcessStep,
   ApiEndpointBlock,
+  DatabaseTable,
+  DatabaseRelationship,
 } from "@/lib/schema/node";
 
 export type NodeKind =
@@ -93,6 +95,14 @@ type RFState = {
   loadGraphPreset: (preset: GraphPreset) => void;
   exportGraphs: () => Record<WorkspaceTab, GraphState>;
   importGraphs: (graphs: Record<WorkspaceTab, GraphState>) => void;
+  apiTableModalNodeId: string | null;
+  openApiTableModal: (nodeId: string) => void;
+  closeApiTableModal: () => void;
+  pushTablesToDb: (
+    dbNodeId: string,
+    tables: DatabaseTable[],
+    relationships: DatabaseRelationship[],
+  ) => void;
 };
 
 const graphPresets: Record<GraphPreset, { nodes: Node[]; edges: Edge[] }> = {
@@ -131,6 +141,8 @@ const graphPresets: Record<GraphPreset, { nodes: Node[]; edges: Edge[] }> = {
           rateLimit: { enabled: false, requests: 100, window: "minute" },
           version: "v1",
           deprecated: false,
+          tables: [],
+          tableRelationships: [],
           processRef: "helloWorldProcess",
           description: "Returns a hello world message",
         },
@@ -203,6 +215,7 @@ export const useStore = create<RFState>((set, get) => {
     graphs: initialGraphs,
     nodes: initialGraphs.api.nodes,
     edges: initialGraphs.api.edges,
+    apiTableModalNodeId: null,
 
     setActiveTab: (tab: WorkspaceTab) => {
       set((state) => {
@@ -533,6 +546,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "",
           },
@@ -561,6 +576,8 @@ export const useStore = create<RFState>((set, get) => {
             rateLimit: { enabled: false, requests: 100, window: "minute" },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "",
           },
@@ -587,6 +604,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "WebSocket interface",
           },
@@ -613,6 +632,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "Socket.IO interface",
           },
@@ -637,6 +658,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "WebRTC interface",
           },
@@ -662,6 +685,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "GraphQL interface",
           },
@@ -684,6 +709,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "gRPC interface",
           },
@@ -707,6 +734,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "Server-Sent Events interface",
           },
@@ -736,6 +765,8 @@ export const useStore = create<RFState>((set, get) => {
             },
             version: "v1",
             deprecated: false,
+            tables: [],
+            tableRelationships: [],
             processRef: "",
             description: "Incoming webhook callback interface",
           },
@@ -1199,6 +1230,60 @@ export const useStore = create<RFState>((set, get) => {
         graphs,
         nodes: currentGraph.nodes,
         edges: currentGraph.edges,
+      });
+    },
+
+    openApiTableModal: (nodeId: string) => {
+      set({ apiTableModalNodeId: nodeId });
+    },
+
+    closeApiTableModal: () => {
+      set({ apiTableModalNodeId: null });
+    },
+
+    pushTablesToDb: (
+      dbNodeId: string,
+      tables: DatabaseTable[],
+      relationships: DatabaseRelationship[],
+    ) => {
+      set((state) => {
+        const dbGraph = state.graphs.database;
+        const updatedNodes = dbGraph.nodes.map((node) => {
+          if (node.id !== dbNodeId) return node;
+          const existing = node.data as NodeData & { kind: "database" };
+          if (existing.kind !== "database") return node;
+          // Merge: replace tables with matching name, append new ones
+          const existingTables = existing.tables ?? [];
+          const incomingByName = new Map(tables.map((t) => [t.name, t]));
+          const merged = existingTables.map((t) =>
+            incomingByName.has(t.name) ? { ...t, ...incomingByName.get(t.name)! } : t,
+          );
+          const existingNames = new Set(existingTables.map((t) => t.name));
+          for (const t of tables) {
+            if (!existingNames.has(t.name)) merged.push(t);
+          }
+          // Same merge for relationships
+          const existingRels = existing.relationships ?? [];
+          const incomingRelById = new Map(relationships.map((r) => [r.id, r]));
+          const mergedRels = existingRels.map((r) =>
+            incomingRelById.has(r.id) ? { ...r, ...incomingRelById.get(r.id)! } : r,
+          );
+          const existingRelIds = new Set(existingRels.map((r) => r.id));
+          for (const r of relationships) {
+            if (!existingRelIds.has(r.id)) mergedRels.push(r);
+          }
+          return {
+            ...node,
+            data: { ...existing, tables: merged, relationships: mergedRels },
+          };
+        });
+        const newDbGraph = { ...dbGraph, nodes: updatedNodes };
+        // If the active tab is database, also update nodes/edges in state
+        const isDbActive = state.activeTab === "database";
+        return {
+          graphs: { ...state.graphs, database: newDbGraph },
+          ...(isDbActive ? { nodes: updatedNodes } : {}),
+        };
       });
     },
   };

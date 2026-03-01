@@ -34,8 +34,8 @@ model CreditBalance {
   id                  String   @id @default(cuid())
   userId              String   @unique
   user                User     @relation(fields: [userId], references: [id])
-  availableCredits    Int      @default(0)
-  monthlyFreeCredits  Int      @default(1000)
+  availableCredits    BigInt   @default(0)
+  monthlyFreeCredits  BigInt   @default(1000)
   freeResetDayOfMonth Int      @default(1) // day-of-month when free credits refresh
   lastResetAt         DateTime @default(now())
   createdAt           DateTime @default(now())
@@ -47,7 +47,7 @@ model CreditTransaction {
   userId    String
   user      User      @relation(fields: [userId], references: [id])
   kind      TransactionKind
-  amount    Int       // positive for add, negative for consumption
+  amount    BigInt    // positive for add, negative for consumption
   note      String?
   createdAt DateTime  @default(now())
 }

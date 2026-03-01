@@ -1021,6 +1021,11 @@ export const ApiBindingSchema = z.object({
     credentials: z.boolean(),
   }).optional(),
 
+  // Data model tables owned by this API binding
+  tables: z.array(DatabaseTableSchema).default([]),
+  tableRelationships: z.array(DatabaseRelationshipSchema).default([]),
+  linkedDbNodeId: z.string().optional(),
+
   // Process Reference
   processRef: z.string(),
 }).superRefine((value, ctx) => {
