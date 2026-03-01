@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ensureUser, requireCredits } from "@/lib/credit";
+import { ensureUser, requireCredits, serializeBalance } from "@/lib/credit";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const balance = await requireCredits(user.id, parsed.data.amount);
-    return NextResponse.json({ balance });
+    return NextResponse.json({ balance: serializeBalance(balance) });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }
