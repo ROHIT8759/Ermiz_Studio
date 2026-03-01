@@ -54,6 +54,8 @@ test.describe("Database Block Runtime", () => {
               },
               version: "1.0.0",
               deprecated: false,
+              tables: [],
+              tableRelationships: [],
               processRef: "process_create_user",
             },
           },

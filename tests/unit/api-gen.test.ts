@@ -12,18 +12,24 @@ import { NextRequest } from "next/server";
 import JSZip from "jszip";
 
 // ---------------------------------------------------------------------------
-// vi.hoisted ensures mockGenerateContent is available inside vi.mock(), which
-// is hoisted to the top of the file by Vitest before any imports run.
-// The factory must use a regular function (not an arrow) so `new GoogleGenAI()`
-// works — arrow functions cannot be constructors.
+// vi.hoisted ensures mocks are available inside vi.mock() factories, which
+// are hoisted to the top of the file by Vitest before any imports run.
 // ---------------------------------------------------------------------------
-const { mockGenerateContent } = vi.hoisted(() => ({
+const { mockGenerateContent, mockGroqCreate } = vi.hoisted(() => ({
   mockGenerateContent: vi.fn(),
+  mockGroqCreate: vi.fn(),
 }));
 
 vi.mock("@google/genai", () => ({
   GoogleGenAI: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
     this.models = { generateContent: mockGenerateContent };
+  }),
+}));
+
+// Mock groq-sdk so tests are offline — default to a successful empty response.
+vi.mock("groq-sdk", () => ({
+  default: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.chat = { completions: { create: mockGroqCreate } };
   }),
 }));
 
@@ -98,19 +104,29 @@ describe("POST /api/gen", () => {
     vi.clearAllMocks();
     // Save current env
     savedKeys["GEMINI_API_KEY"] = process.env.GEMINI_API_KEY;
+    savedKeys["GROQ_API_KEY"] = process.env.GROQ_API_KEY;
     for (let i = 1; i <= 10; i++) {
       savedKeys[`GEMINI_API_KEY_${i}`] = process.env[`GEMINI_API_KEY_${i}`];
     }
-    // Default: single key via numbered format
+    // Default: single Gemini key; Groq key always present so callGroq reaches the mock
     clearAllKeys();
     process.env.GEMINI_API_KEY_1 = "test-api-key";
+    process.env.GROQ_API_KEY = "test-groq-key";
+
+    // Default Groq mock: succeed with empty string (tests that don't exhaust
+    // Gemini won't reach this mock; 429 tests override it per-test)
+    mockGroqCreate.mockResolvedValue({
+      choices: [{ message: { content: "" } }],
+    });
   });
 
   afterEach(() => {
     // Restore originals
     clearAllKeys();
+    delete process.env.GROQ_API_KEY;
     for (const [key, val] of Object.entries(savedKeys)) {
       if (val !== undefined) process.env[key] = val;
+      else delete process.env[key];
     }
   });
 
@@ -303,9 +319,14 @@ describe("POST /api/gen", () => {
     expect(body.error).toBe("Internal server error");
   });
 
-  it("returns 429 when Gemini returns RESOURCE_EXHAUSTED on plan call", async () => {
-    mockGenerateContent.mockRejectedValueOnce(
-      new Error('RESOURCE_EXHAUSTED: Please retry in 54s'),
+  it("returns 429 when Gemini returns RESOURCE_EXHAUSTED on plan call and Groq also fails", async () => {
+    // Use a very short retry delay (1s) so KeyRotator.acquire() wait fits in the 5s test timeout
+    mockGenerateContent.mockRejectedValue(
+      new Error("RESOURCE_EXHAUSTED: Please retry in 1s"),
+    );
+    // Groq fallback also rate-limited
+    mockGroqCreate.mockRejectedValueOnce(
+      new Error("rate_limit_exceeded: Too many requests"),
     );
 
     const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
@@ -366,7 +387,7 @@ describe("POST /api/gen", () => {
     expect(Object.keys(zip.files)).toContain("index.js");
   });
 
-  it("uses the correct AI model (gemini-2.5-flash)", async () => {
+  it("uses the correct AI model (gemini-2.5-flash-lite)", async () => {
     mockGenerateContent
       .mockResolvedValueOnce(PLAN_RESPONSE)
       .mockResolvedValue({ text: "// code" });
@@ -374,7 +395,7 @@ describe("POST /api/gen", () => {
     await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
 
     for (const call of mockGenerateContent.mock.calls) {
-      expect(call[0].model).toBe("gemini-2.5-flash");
+      expect(call[0].model).toBe("gemini-2.5-flash-lite");
     }
   });
 
@@ -401,17 +422,18 @@ describe("POST /api/gen", () => {
     expect(mockGenerateContent.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("returns 429 only when ALL keys are exhausted", async () => {
+  it("returns 429 only when ALL keys are exhausted and Groq also fails", async () => {
     clearAllKeys();
     process.env.GEMINI_API_KEY_1 = "key-a";
     process.env.GEMINI_API_KEY_2 = "key-b";
     process.env.GEMINI_API_KEY_3 = "key-c";
 
-    // All three keys return quota errors for the plan call
-    mockGenerateContent
-      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED: retry in 10s"))
-      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED: retry in 20s"))
-      .mockRejectedValueOnce(new Error("RESOURCE_EXHAUSTED: retry in 30s"));
+    // All three Gemini keys return quota errors; use 1s retry so waits fit in 5s test timeout
+    mockGenerateContent.mockRejectedValue(new Error("RESOURCE_EXHAUSTED: retry in 1s"));
+    // Groq fallback also rate-limited
+    mockGroqCreate.mockRejectedValueOnce(
+      new Error("rate_limit_exceeded: Too many requests"),
+    );
 
     const res = await POST(makeRequest({ nodes: VALID_NODES, edges: VALID_EDGES }));
     expect(res.status).toBe(429);

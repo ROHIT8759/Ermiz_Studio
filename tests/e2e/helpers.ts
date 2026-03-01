@@ -92,6 +92,8 @@ export const buildMockGraph = (): GraphCollection => ({
           },
           version: "1.0.0",
           deprecated: false,
+          tables: [],
+          tableRelationships: [],
           processRef: "process-mock-health",
         },
       },
