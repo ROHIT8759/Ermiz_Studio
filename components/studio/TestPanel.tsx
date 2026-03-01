@@ -11,7 +11,7 @@ import type {
   InputField,
   OutputField,
 } from "@/lib/schema/node";
-import type { Node } from "@xyflow/react";
+import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "@/lib/schema/node";
 import {
   type Row,
@@ -305,7 +305,7 @@ function KVTable({ rows, onChange, keyPlaceholder = "Key", valPlaceholder = "Val
   );
 }
 
-type RunResult = { status: number; latency: number; body: unknown };
+type RunResult = { status: number; latency: number; body: unknown; size?: number };
 
 function ResultBox({ r }: { r: RunResult }) {
   const ok = r.status < 400;
@@ -314,10 +314,341 @@ function ResultBox({ r }: { r: RunResult }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Badge label={`${r.status}`} color={ok ? C.green : C.red} />
         <span style={{ fontSize: 11, color: C.muted }}>{r.latency}ms</span>
+        {r.size != null && <span style={{ fontSize: 11, color: C.muted }}>{r.size} B</span>}
       </div>
       <JsonHighlight value={r.body} maxH={260} />
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Environment Variables — Postman-style {{variable}} interpolation
+// ─────────────────────────────────────────────────────────────────────────────
+
+type EnvVar = { key: string; value: string; enabled: boolean };
+
+const ENV_STORAGE_KEY = "ermiz-test-env-vars";
+function loadEnvVars(): EnvVar[] {
+  try {
+    const raw = localStorage.getItem(ENV_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveEnvVars(vars: EnvVar[]) {
+  localStorage.setItem(ENV_STORAGE_KEY, JSON.stringify(vars));
+}
+function interpolate(str: string, vars: EnvVar[]): string {
+  if (!vars || !Array.isArray(vars)) return str;
+  let out = str;
+  for (const v of vars) {
+    if (v.enabled && v.key) out = out.replaceAll(`{{${v.key}}}`, v.value);
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Request History
+// ─────────────────────────────────────────────────────────────────────────────
+
+type HistoryEntry = {
+  id: string;
+  method: string;
+  url: string;
+  status: number;
+  latency: number;
+  ts: string;
+  body?: unknown;
+  responseBody?: unknown;
+};
+
+const historyStore: HistoryEntry[] = [];
+function addHistory(entry: Omit<HistoryEntry, "id" | "ts">) {
+  historyStore.unshift({
+    ...entry,
+    id: Math.random().toString(36).slice(2),
+    ts: new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+  });
+  if (historyStore.length > 50) historyStore.length = 50;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saved Collections
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SavedRequest = {
+  id: string;
+  name: string;
+  method: string;
+  url: string;
+  bodyJson: string;
+  headers: KVRow[];
+  params: KVRow[];
+};
+
+const COLLECTION_KEY = "ermiz-test-collections";
+function loadCollections(): SavedRequest[] {
+  try {
+    const raw = localStorage.getItem(COLLECTION_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveCollections(c: SavedRequest[]) {
+  localStorage.setItem(COLLECTION_KEY, JSON.stringify(c));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Integration Validator
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CheckSeverity = "pass" | "warn" | "fail";
+type IntegrationCheck = {
+  id: string;
+  title: string;
+  severity: CheckSeverity;
+  detail: string;
+  nodeId?: string;
+};
+
+function runIntegrationChecks(
+  nodes: TNode[],
+  edges: { source: string; target: string }[],
+): IntegrationCheck[] {
+  const checks: IntegrationCheck[] = [];
+  const apis = nodes.filter((n) => n.kind === "api_binding");
+  const funcs = nodes.filter((n) => n.kind === "process");
+  const dbs = nodes.filter((n) => n.kind === "database");
+  const queues = nodes.filter((n) => n.kind === "queue");
+  const connMap = new Map<string, Set<string>>();
+  for (const e of edges) {
+    if (!connMap.has(e.source)) connMap.set(e.source, new Set());
+    if (!connMap.has(e.target)) connMap.set(e.target, new Set());
+    connMap.get(e.source)!.add(e.target);
+    connMap.get(e.target)!.add(e.source);
+  }
+
+  // 1. API → Function wiring
+  for (const api of apis) {
+    const apiData = api.data as ApiBinding;
+    const connected = connMap.get(api.id);
+    const linkedToFunc = connected
+      ? funcs.some((f) => connected.has(f.id))
+      : false;
+    if (linkedToFunc) {
+      checks.push({
+        id: `api-func-${api.id}`,
+        title: `API "${api.label}" → Function linked`,
+        severity: "pass",
+        detail: `Endpoint ${apiData.method} ${apiData.route} is connected to a function block.`,
+        nodeId: api.id,
+      });
+    } else {
+      checks.push({
+        id: `api-func-${api.id}`,
+        title: `API "${api.label}" has no function handler`,
+        severity: "warn",
+        detail: `Endpoint ${apiData.method} ${apiData.route} is not connected to any function block. It will use auto-CRUD.`,
+        nodeId: api.id,
+      });
+    }
+  }
+
+  // 2. Function → DB wiring
+  for (const fn of funcs) {
+    const fnData = fn.data as ProcessDefinition;
+    const dbSteps = fnData.steps.filter((s) => s.kind === "db_operation");
+    if (dbSteps.length > 0) {
+      const connected = connMap.get(fn.id);
+      const linkedToDB = connected
+        ? dbs.some((d) => connected.has(d.id))
+        : false;
+      if (linkedToDB) {
+        checks.push({
+          id: `func-db-${fn.id}`,
+          title: `Function "${fn.label}" → DB connected`,
+          severity: "pass",
+          detail: `${dbSteps.length} db_operation step(s) with a linked database.`,
+          nodeId: fn.id,
+        });
+      } else {
+        checks.push({
+          id: `func-db-${fn.id}`,
+          title: `Function "${fn.label}" has db_operations but no DB link`,
+          severity: "fail",
+          detail: `Function has ${dbSteps.length} db_operation step(s) but is not connected to any database block.`,
+          nodeId: fn.id,
+        });
+      }
+    }
+  }
+
+  // 3. DB tables defined
+  for (const db of dbs) {
+    const dbData = db.data as DatabaseBlock;
+    if (dbData.tables.length === 0) {
+      checks.push({
+        id: `db-tables-${db.id}`,
+        title: `Database "${db.label}" has no tables`,
+        severity: "warn",
+        detail: `Define at least one table with fields for proper code generation.`,
+        nodeId: db.id,
+      });
+    } else {
+      const emptyTables = dbData.tables.filter((t) => t.fields.length === 0);
+      if (emptyTables.length > 0) {
+        checks.push({
+          id: `db-fields-${db.id}`,
+          title: `${emptyTables.length} table(s) in "${db.label}" have no fields`,
+          severity: "warn",
+          detail: `Tables without fields: ${emptyTables.map((t) => t.name).join(", ")}`,
+          nodeId: db.id,
+        });
+      } else {
+        checks.push({
+          id: `db-tables-${db.id}`,
+          title: `Database "${db.label}" — ${dbData.tables.length} table(s) OK`,
+          severity: "pass",
+          detail: `All tables have fields defined.`,
+          nodeId: db.id,
+        });
+      }
+      // Check for primary keys
+      const noPK = dbData.tables.filter(
+        (t) => t.fields.length > 0 && !t.fields.some((f) => f.isPrimaryKey),
+      );
+      if (noPK.length > 0) {
+        checks.push({
+          id: `db-pk-${db.id}`,
+          title: `${noPK.length} table(s) missing primary key`,
+          severity: "warn",
+          detail: `Tables without PK: ${noPK.map((t) => t.name).join(", ")}. A primary key is recommended.`,
+          nodeId: db.id,
+        });
+      }
+    }
+  }
+
+  // 4. Queue consumers
+  for (const q of queues) {
+    const connected = connMap.get(q.id);
+    const hasConsumer = connected
+      ? funcs.some((f) => connected.has(f.id))
+      : false;
+    if (hasConsumer) {
+      checks.push({
+        id: `queue-consumer-${q.id}`,
+        title: `Queue "${q.label}" has a consumer`,
+        severity: "pass",
+        detail: `Connected to at least one function block.`,
+        nodeId: q.id,
+      });
+    } else {
+      checks.push({
+        id: `queue-consumer-${q.id}`,
+        title: `Queue "${q.label}" has no consumer`,
+        severity: "warn",
+        detail: `No function block is connected to consume messages from this queue.`,
+        nodeId: q.id,
+      });
+    }
+  }
+
+  // 5. API route uniqueness
+  const routeMap = new Map<string, string[]>();
+  for (const api of apis) {
+    const d = api.data as ApiBinding;
+    const key = `${d.method}:${d.route}`;
+    if (!routeMap.has(key)) routeMap.set(key, []);
+    routeMap.get(key)!.push(api.label);
+  }
+  for (const [route, labels] of routeMap) {
+    if (labels.length > 1) {
+      checks.push({
+        id: `dup-route-${route}`,
+        title: `Duplicate route: ${route}`,
+        severity: "fail",
+        detail: `APIs sharing this route: ${labels.join(", ")}. Each route+method must be unique.`,
+      });
+    }
+  }
+
+  // 6. Function I/O check
+  for (const fn of funcs) {
+    const fnData = fn.data as ProcessDefinition;
+    if (fnData.inputs.length === 0 && fnData.steps.length === 0) {
+      checks.push({
+        id: `func-empty-${fn.id}`,
+        title: `Function "${fn.label}" has no inputs or steps`,
+        severity: "warn",
+        detail: `Consider adding inputs, steps, or outputs for meaningful code generation.`,
+        nodeId: fn.id,
+      });
+    }
+  }
+
+  // 7. FK reference validity
+  for (const db of dbs) {
+    const dbData = db.data as DatabaseBlock;
+    const tableNames = new Set(dbData.tables.map((t) => t.name));
+    for (const t of dbData.tables) {
+      for (const f of t.fields) {
+        if (f.isForeignKey && f.references?.table) {
+          if (tableNames.has(f.references.table)) {
+            checks.push({
+              id: `fk-valid-${db.id}-${t.name}-${f.name}`,
+              title: `FK ${t.name}.${f.name} → ${f.references.table} valid`,
+              severity: "pass",
+              detail: `Foreign key references an existing table.`,
+              nodeId: db.id,
+            });
+          } else {
+            checks.push({
+              id: `fk-invalid-${db.id}-${t.name}-${f.name}`,
+              title: `FK ${t.name}.${f.name} → "${f.references.table}" not found`,
+              severity: "fail",
+              detail: `Foreign key references table "${f.references.table}" which doesn't exist in this database.`,
+              nodeId: db.id,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 8. Orphan nodes
+  const allConnected = new Set<string>();
+  for (const e of edges) {
+    allConnected.add(e.source);
+    allConnected.add(e.target);
+  }
+  if (nodes.length >= 2) {
+    const orphans = nodes.filter(
+      (n) => !allConnected.has(n.id) && n.kind !== "service_boundary",
+    );
+    if (orphans.length > 0) {
+      checks.push({
+        id: "orphan-nodes",
+        title: `${orphans.length} unconnected block(s)`,
+        severity: "warn",
+        detail: `Blocks without connections: ${orphans.map((n) => n.label).join(", ")}`,
+      });
+    }
+  }
+
+  // Summary check if nothing found
+  if (checks.length === 0 && nodes.length > 0) {
+    checks.push({
+      id: "all-ok",
+      title: "Architecture looks good",
+      severity: "pass",
+      detail: "No integration issues detected.",
+    });
+  }
+
+  return checks;
 }
 
 function FieldInputs({
@@ -367,7 +698,7 @@ function FieldInputs({
 type AuthType = "None" | "Bearer" | "API Key" | "Basic";
 type BodyMode = "none" | "json" | "form";
 
-function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
+function ApiPane({ node, sv, envVars }: { node: ApiBinding; sv: number; envVars: EnvVar[] }) {
   void sv;
   const isRest = node.protocol === "rest";
 
@@ -375,24 +706,24 @@ function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
   const [method, setMethod] = useState<string>(node.method ?? "GET");
   const [url, setUrl] = useState(node.route ?? "/");
 
-  const pathFields  = node.request?.pathParams  ?? [];
+  const pathFields = node.request?.pathParams ?? [];
   const queryFields = node.request?.queryParams ?? [];
-  const headerFields = node.request?.headers   ?? [];
-  const bodyFields  = node.request?.body?.schema ?? [];
+  const headerFields = node.request?.headers ?? [];
+  const bodyFields = node.request?.body?.schema ?? [];
 
   const [paramRows, setParamRows] = useState<KVRow[]>(() => [
-    ...pathFields .map((f) => mkKV(f.name, mockForField(f.name, f.type))),
+    ...pathFields.map((f) => mkKV(f.name, mockForField(f.name, f.type))),
     ...queryFields.map((f) => mkKV(f.name, mockForField(f.name, f.type))),
   ]);
   const [headerRows, setHeaderRows] = useState<KVRow[]>(() =>
     headerFields.map((f) => mkKV(f.name, mockForField(f.name, f.type)))
   );
   const [authType, setAuthType] = useState<AuthType>("None");
-  const [authToken, setAuthToken]   = useState("");
+  const [authToken, setAuthToken] = useState("");
   const [apiKeyName, setApiKeyName] = useState("X-API-Key");
-  const [apiKeyVal, setApiKeyVal]   = useState("");
-  const [basicUser, setBasicUser]   = useState("");
-  const [basicPass, setBasicPass]   = useState("");
+  const [apiKeyVal, setApiKeyVal] = useState("");
+  const [basicUser, setBasicUser] = useState("");
+  const [basicPass, setBasicPass] = useState("");
 
   const [bodyMode, setBodyMode] = useState<BodyMode>(bodyFields.length > 0 ? "json" : "none");
   const [bodyJson, setBodyJson] = useState(() => {
@@ -408,9 +739,9 @@ function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
 
   // ── response state ────────────────────────────────────────────────────────
   const [running, setRunning] = useState(false);
-  const [result, setResult]   = useState<RunResult | null>(null);
-  const [resTab, setResTab]   = useState<"Body" | "Headers">("Body");
-  const [reqTab, setReqTab]   = useState<"Params" | "Auth" | "Headers" | "Body">("Params");
+  const [result, setResult] = useState<RunResult | null>(null);
+  const [resTab, setResTab] = useState<"Body" | "Headers">("Body");
+  const [reqTab, setReqTab] = useState<"Params" | "Auth" | "Headers" | "Body">("Params");
 
   // static response headers (simulated)
   const resHeaders = useMemo(() => ({
@@ -434,10 +765,12 @@ function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
 
   // ── send ──────────────────────────────────────────────────────────────────
   const send = useCallback(async () => {
+    const resolvedUrl = interpolate(url, envVars);
     const bodyVals: Record<string, string> = {};
     if (bodyMode === "json" && bodyJson.trim()) {
       try {
-        const parsed = JSON.parse(bodyJson);
+        const resolved = interpolate(bodyJson, envVars);
+        const parsed = JSON.parse(resolved);
         if (typeof parsed === "object" && parsed !== null)
           Object.entries(parsed).forEach(([k, v]) => { bodyVals[k] = String(v); });
         setJsonError(null);
@@ -446,23 +779,38 @@ function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
         return;
       }
     } else if (bodyMode === "form") {
-      bodyForm.filter((r) => r.enabled && r.key).forEach((r) => { bodyVals[r.key] = r.value; });
+      bodyForm.filter((r) => r.enabled && r.key).forEach((r) => {
+        bodyVals[interpolate(r.key, envVars)] = interpolate(r.value, envVars);
+      });
     }
     const pathVals: Record<string, string> = {};
-    paramRows.filter((r) => r.enabled && r.key && url.includes(`:${r.key}`))
-      .forEach((r) => { pathVals[r.key] = r.value; });
+    paramRows.filter((r) => r.enabled && r.key && resolvedUrl.includes(`:${r.key}`))
+      .forEach((r) => { pathVals[r.key] = interpolate(r.value, envVars); });
     const queryVals: Record<string, string> = {};
-    paramRows.filter((r) => r.enabled && r.key && !url.includes(`:${r.key}`))
-      .forEach((r) => { queryVals[r.key] = r.value; });
+    paramRows.filter((r) => r.enabled && r.key && !resolvedUrl.includes(`:${r.key}`))
+      .forEach((r) => { queryVals[interpolate(r.key, envVars)] = interpolate(r.value, envVars); });
 
     setRunning(true);
+    const t0 = performance.now();
     const ms = randMs(60, 300);
     await wait(ms);
-    const { status, body } = handleApiRequest(method, url, pathVals, queryVals, bodyVals);
-    setResult({ status, latency: ms, body });
+    const { status, body } = handleApiRequest(method, resolvedUrl, pathVals, queryVals, bodyVals);
+    const latency = Math.round(performance.now() - t0);
+    const responseSize = JSON.stringify(body).length;
+    const res: RunResult = { status, latency, body, size: responseSize };
+    setResult(res);
     setResTab("Body");
     setRunning(false);
-  }, [method, url, paramRows, bodyMode, bodyJson, bodyForm]);
+
+    addHistory({
+      method,
+      url: resolvedUrl,
+      status,
+      latency,
+      body: bodyMode === "json" ? bodyJson : undefined,
+      responseBody: body,
+    });
+  }, [method, url, paramRows, bodyMode, bodyJson, bodyForm, envVars]);
 
   // ── non-REST fallback ─────────────────────────────────────────────────────
   if (!isRest) {
@@ -543,6 +891,23 @@ function ApiPane({ node, sv }: { node: ApiBinding; sv: number }) {
           display: "flex", alignItems: "center", gap: 7, flexShrink: 0,
         }}>
           {running ? <><Spinner /> Sending…</> : "Send"}
+        </button>
+        <button type="button" title="Save to Collection" onClick={() => {
+          const req: SavedRequest = {
+            id: Math.random().toString(36).slice(2),
+            name: node.label || `${method} ${url}`,
+            method, url, bodyJson, headers: headerRows, params: paramRows,
+          };
+          const cols = loadCollections();
+          cols.unshift(req);
+          saveCollections(cols);
+        }} style={{
+          background: C.float, color: C.muted, border: "none",
+          borderLeft: `1px solid ${C.border}`,
+          padding: "0 14px", fontSize: 14, cursor: "pointer",
+          display: "flex", alignItems: "center", flexShrink: 0,
+        }}>
+          💾
         </button>
       </div>
 
@@ -1223,6 +1588,325 @@ function InfraPane({ node }: { node: InfraBlock }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// History Pane
+// ─────────────────────────────────────────────────────────────────────────────
+
+function HistoryPane() {
+  const [, forceUpdate] = useState(0);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  if (historyStore.length === 0) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.fg }}>📋 Request History</div>
+        <Panel>
+          <div style={{ fontSize: 12, color: C.muted, padding: 20, textAlign: "center" }}>
+            No requests yet. Send a request from the API pane to see it here.
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.fg }}>📋 Request History</div>
+        <button type="button" style={{ ...btn(), fontSize: 11, padding: "4px 10px" }}
+          onClick={() => { historyStore.length = 0; forceUpdate((n) => n + 1); }}>
+          Clear
+        </button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {historyStore.map((h) => {
+          const mc = MC[h.method] ?? C.primary;
+          const sc = h.status < 400 ? C.green : C.red;
+          const isExp = expanded === h.id;
+          return (
+            <div key={h.id}>
+              <button type="button" onClick={() => setExpanded(isExp ? null : h.id)} style={{
+                width: "100%", textAlign: "left", background: isExp ? C.float : C.panel,
+                border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px",
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: mc, minWidth: 52 }}>
+                  {h.method}
+                </span>
+                <span style={{ flex: 1, fontSize: 12, color: C.fg, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {h.url}
+                </span>
+                <Badge label={`${h.status}`} color={sc} />
+                <span style={{ fontSize: 10, color: C.muted }}>{h.latency}ms</span>
+                <span style={{ fontSize: 10, color: C.muted }}>{h.ts}</span>
+              </button>
+              {isExp && h.responseBody != null && (
+                <div style={{ padding: "8px 14px", background: C.bg, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 8px 8px" }}>
+                  <SLabel>Response Body</SLabel>
+                  <JsonHighlight value={h.responseBody} maxH={240} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Collections Pane
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CollectionsPane({ onLoadRequest }: { onLoadRequest?: (req: SavedRequest) => void }) {
+  const [collections, setCollections] = useState<SavedRequest[]>(() => loadCollections());
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const remove = (id: string) => {
+    const next = collections.filter((c) => c.id !== id);
+    setCollections(next);
+    saveCollections(next);
+  };
+
+  if (collections.length === 0) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.fg }}>📁 Collections</div>
+        <Panel>
+          <div style={{ fontSize: 12, color: C.muted, padding: 20, textAlign: "center" }}>
+            No saved requests. Click 💾 in the URL bar to save a request.
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.fg }}>📁 Collections ({collections.length})</div>
+        <button type="button" style={{ ...btn(false, true), fontSize: 11, padding: "4px 10px" }}
+          onClick={() => { setCollections([]); saveCollections([]); }}>
+          Clear all
+        </button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {collections.map((req) => {
+          const mc = MC[req.method] ?? C.primary;
+          const isExp = expanded === req.id;
+          return (
+            <div key={req.id}>
+              <div style={{
+                background: isExp ? C.float : C.panel, border: `1px solid ${C.border}`,
+                borderRadius: isExp ? "8px 8px 0 0" : 8, padding: "10px 14px",
+                display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: mc, minWidth: 52 }}>
+                  {req.method}
+                </span>
+                <button type="button" onClick={() => setExpanded(isExp ? null : req.id)} style={{
+                  flex: 1, background: "none", border: "none", textAlign: "left", cursor: "pointer",
+                  display: "flex", flexDirection: "column", gap: 2, padding: 0,
+                }}>
+                  <span style={{ fontSize: 12, color: C.fg, fontWeight: 500 }}>{req.name}</span>
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>{req.url}</span>
+                </button>
+                {onLoadRequest && (
+                  <button type="button" style={{ ...btn(true), fontSize: 10, padding: "3px 8px" }}
+                    onClick={() => onLoadRequest(req)}>Load</button>
+                )}
+                <button type="button" style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 15, padding: 0 }}
+                  onClick={() => remove(req.id)}>×</button>
+              </div>
+              {isExp && (
+                <div style={{ padding: 14, background: C.bg, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 8px 8px" }}>
+                  {req.params.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <SLabel>Params</SLabel>
+                      {req.params.filter((p) => p.key).map((p) => (
+                        <div key={p.id} style={{ fontSize: 11, fontFamily: "monospace", color: C.fg, padding: "2px 0" }}>
+                          <span style={{ color: C.muted }}>{p.key}</span> = {p.value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {req.headers.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <SLabel>Headers</SLabel>
+                      {req.headers.filter((h) => h.key).map((h) => (
+                        <div key={h.id} style={{ fontSize: 11, fontFamily: "monospace", color: C.fg, padding: "2px 0" }}>
+                          <span style={{ color: "#93c5fd" }}>{h.key}:</span> {h.value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {req.bodyJson && (
+                    <div>
+                      <SLabel>Body</SLabel>
+                      <Code value={JSON.parse(req.bodyJson)} maxH={200} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Environment Variables Pane
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EnvVarsPane({ envVars, setEnvVars }: {
+  envVars: EnvVar[]; setEnvVars: (v: EnvVar[]) => void;
+}) {
+  const update = (idx: number, patch: Partial<EnvVar>) => {
+    const next = envVars.map((v, i) => (i === idx ? { ...v, ...patch } : v));
+    setEnvVars(next);
+  };
+  const remove = (idx: number) => {
+    setEnvVars(envVars.filter((_, i) => i !== idx));
+  };
+  const add = () => {
+    setEnvVars([...envVars, { key: "", value: "", enabled: true }]);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.fg }}>⚙ Environment Variables</div>
+      </div>
+      <Panel style={{ padding: 0 }}>
+        <div style={{ fontSize: 11, color: C.muted, padding: "10px 14px", borderBottom: `1px solid ${C.border}` }}>
+          Use <code style={{ color: C.primary, background: C.bg, padding: "1px 4px", borderRadius: 3 }}>{"{{variable}}"}</code> syntax in URLs, headers, params, and request bodies.
+        </div>
+        {envVars.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 2fr 24px", gap: "4px 8px", padding: "10px 14px 6px", borderBottom: `1px solid ${C.border}` }}>
+            <span />
+            <span style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: "0.05em" }}>VARIABLE</span>
+            <span style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: "0.05em" }}>VALUE</span>
+            <span />
+          </div>
+        )}
+        <div style={{ padding: "8px 14px" }}>
+          {envVars.map((v, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr 2fr 24px", gap: "4px 8px", alignItems: "center", marginBottom: 6 }}>
+              <input type="checkbox" checked={v.enabled} onChange={(e) => update(i, { enabled: e.target.checked })}
+                style={{ accentColor: C.primary, width: 14, height: 14 }} />
+              <input style={{ ...INPUT, padding: "6px 8px", opacity: v.enabled ? 1 : 0.45, fontFamily: "monospace" }}
+                placeholder="variable_name" value={v.key}
+                onChange={(e) => update(i, { key: e.target.value })} />
+              <input style={{ ...INPUT, padding: "6px 8px", opacity: v.enabled ? 1 : 0.45 }}
+                placeholder="value" value={v.value}
+                onChange={(e) => update(i, { value: e.target.value })} />
+              <button type="button" onClick={() => remove(i)}
+                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 15, padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+          <button type="button" onClick={add}
+            style={{ ...btn(), fontSize: 11, padding: "5px 12px", marginTop: 4 }}>
+            + Add variable
+          </button>
+        </div>
+      </Panel>
+      {envVars.filter((v) => v.enabled && v.key).length > 0 && (
+        <Panel>
+          <SLabel>Active Variables</SLabel>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {envVars.filter((v) => v.enabled && v.key).map((v, i) => (
+              <span key={i} style={{
+                fontSize: 11, fontFamily: "monospace", padding: "3px 8px",
+                background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.primary,
+              }}>
+                {`{{${v.key}}}`} = <span style={{ color: C.fg }}>{v.value || "(empty)"}</span>
+              </span>
+            ))}
+          </div>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Integration Validator Pane
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ValidatorPane({ nodes, edges }: {
+  nodes: TNode[]; edges: { source: string; target: string }[];
+}) {
+  const checks = useMemo(() => runIntegrationChecks(nodes, edges), [nodes, edges]);
+  const counts = useMemo(() => ({
+    pass: checks.filter((c) => c.severity === "pass").length,
+    warn: checks.filter((c) => c.severity === "warn").length,
+    fail: checks.filter((c) => c.severity === "fail").length,
+  }), [checks]);
+
+  const sevColor: Record<CheckSeverity, string> = { pass: C.green, warn: C.amber, fail: C.red };
+  const sevIcon: Record<CheckSeverity, string> = { pass: "✓", warn: "⚠", fail: "✗" };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: C.fg }}>✓ Integration Validator</div>
+
+      {/* Summary bar */}
+      <div style={{
+        display: "flex", gap: 16, padding: "12px 16px",
+        background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: C.green, display: "inline-block" }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>{counts.pass}</span>
+          <span style={{ fontSize: 11, color: C.muted }}>passed</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: C.amber, display: "inline-block" }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>{counts.warn}</span>
+          <span style={{ fontSize: 11, color: C.muted }}>warnings</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: C.red, display: "inline-block" }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>{counts.fail}</span>
+          <span style={{ fontSize: 11, color: C.muted }}>failures</span>
+        </div>
+      </div>
+
+      {/* Check list */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {checks.map((ch) => (
+          <div key={ch.id} style={{
+            display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px",
+            background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8,
+          }}>
+            <span style={{
+              fontSize: 14, fontWeight: 700, color: sevColor[ch.severity],
+              minWidth: 20, textAlign: "center", marginTop: 1,
+            }}>
+              {sevIcon[ch.severity]}
+            </span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.fg, marginBottom: 3 }}>{ch.title}</div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>{ch.detail}</div>
+            </div>
+            <Badge label={ch.severity.toUpperCase()} color={sevColor[ch.severity]} />
+          </div>
+        ))}
+      </div>
+
+      {nodes.length === 0 && (
+        <Panel>
+          <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: 16 }}>
+            Add blocks to your canvas to run integration checks.
+          </div>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Shared pieces
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1346,7 +2030,28 @@ export function TestPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
     infra: nodes.filter((n) => n.kind === "infra"),
   }), [nodes]);
 
+  const edges = useMemo(
+    () => (Object.values(graphs).flatMap((g) => g.edges ?? []) as Edge[])
+      .map((e) => ({ source: e.source, target: e.target })),
+    [graphs]
+  );
+
   const [selected, setSelected] = useState<string | null>(null);
+  type ViewMode = "history" | "collections" | "envvars" | "validator" | null;
+  const [viewMode, setViewMode] = useState<ViewMode>(null);
+  const [envVars, setEnvVars] = useState<EnvVar[]>(() => {
+    if (typeof window === "undefined") return [];
+    return loadEnvVars();
+  });
+  const updateEnvVars = useCallback((v: EnvVar[]) => {
+    setEnvVars(v);
+    saveEnvVars(v);
+  }, []);
+
+  const handleSelectNode = useCallback((id: string) => {
+    setSelected(id);
+    setViewMode(null);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1398,26 +2103,58 @@ export function TestPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
         <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
           {/* Sidebar */}
           <div style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${C.border}`, background: C.bg, overflowY: "auto", paddingTop: 8, paddingBottom: 16 }}>
-            <SidebarGroup title="APIs" icon="⬡" items={groups.apis} selected={selected} onSelect={setSelected} sv={sv} />
-            <SidebarGroup title="Functions" icon="⚡" items={groups.functions} selected={selected} onSelect={setSelected} sv={sv} />
-            <SidebarGroup title="Databases" icon="◈" items={groups.databases} selected={selected} onSelect={setSelected} sv={sv} />
-            <SidebarGroup title="Queues" icon="⇌" items={groups.queues} selected={selected} onSelect={setSelected} sv={sv} />
-            <SidebarGroup title="Infrastructure" icon="⬜" items={groups.infra} selected={selected} onSelect={setSelected} sv={sv} />
+            <SidebarGroup title="APIs" icon="⬡" items={groups.apis} selected={selected} onSelect={handleSelectNode} sv={sv} />
+            <SidebarGroup title="Functions" icon="⚡" items={groups.functions} selected={selected} onSelect={handleSelectNode} sv={sv} />
+            <SidebarGroup title="Databases" icon="◈" items={groups.databases} selected={selected} onSelect={handleSelectNode} sv={sv} />
+            <SidebarGroup title="Queues" icon="⇌" items={groups.queues} selected={selected} onSelect={handleSelectNode} sv={sv} />
+            <SidebarGroup title="Infrastructure" icon="⬜" items={groups.infra} selected={selected} onSelect={handleSelectNode} sv={sv} />
+
+            {/* ── Tools ── */}
+            <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: "0.07em", textTransform: "uppercase", padding: "8px 14px 4px" }}>
+                🔧&nbsp;TOOLS
+              </div>
+              {([
+                { key: "validator", label: "Integration Validator", icon: "✓" },
+                { key: "history", label: "Request History", icon: "📋" },
+                { key: "collections", label: "Collections", icon: "📁" },
+                { key: "envvars", label: "Variables", icon: "⚙" },
+              ] as const).map((t) => {
+                const isActive = viewMode === t.key;
+                return (
+                  <button key={t.key} type="button" onClick={() => { setViewMode(t.key); setSelected(null); }}
+                    style={{
+                      width: "100%", textAlign: "left", border: "none",
+                      background: isActive ? `color-mix(in srgb, ${C.primary} 10%, ${C.float})` : "transparent",
+                      color: isActive ? C.fg : "#9aaccc",
+                      padding: "7px 14px", fontSize: 12, cursor: "pointer",
+                      borderLeft: `2px solid ${isActive ? C.primary : "transparent"}`,
+                      fontWeight: isActive ? 600 : 400,
+                    }}>
+                    {t.icon} {t.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Main content */}
           <div style={{ flex: 1, overflowY: "auto", padding: 28, maxWidth: 780 }}>
-            {activeNode ? (
+            {viewMode === "validator" && <ValidatorPane nodes={nodes} edges={edges} />}
+            {viewMode === "history" && <HistoryPane />}
+            {viewMode === "collections" && <CollectionsPane />}
+            {viewMode === "envvars" && <EnvVarsPane envVars={envVars} setEnvVars={updateEnvVars} />}
+            {!viewMode && activeNode ? (
               <React.Fragment key={activeNode.id}>
-                {activeNode.kind === "api_binding" && <ApiPane node={activeNode.data as ApiBinding} sv={sv} />}
+                {activeNode.kind === "api_binding" && <ApiPane node={activeNode.data as ApiBinding} sv={sv} envVars={envVars} />}
                 {activeNode.kind === "process" && <FunctionPane node={activeNode.data as ProcessDefinition} />}
                 {activeNode.kind === "database" && <DatabasePane node={activeNode.data as DatabaseBlock} sv={sv} />}
                 {activeNode.kind === "queue" && <QueuePane node={activeNode.data as QueueBlock} sv={sv} />}
                 {activeNode.kind === "infra" && <InfraPane node={activeNode.data as InfraBlock} />}
               </React.Fragment>
-            ) : (
+            ) : !viewMode ? (
               <div style={{ fontSize: 12, color: C.muted }}>Select a component from the sidebar.</div>
-            )}
+            ) : null}
           </div>
         </div>
       )}

@@ -236,9 +236,30 @@ async function callGroq(prompt: string, onRequest?: () => void): Promise<string>
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Returns true for transient network/connectivity errors (timeout, DNS,
+ * connection reset) that warrant an immediate Groq fallback instead of
+ * propagating the error — since all Gemini keys share the same endpoint,
+ * retrying a different key won't help when the network itself is the issue.
+ */
+function isNetworkError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  const cause = (error as { cause?: { code?: string } })?.cause;
+  return (
+    msg.toLowerCase().includes("fetch failed") ||
+    msg.toLowerCase().includes("connect timeout") ||
+    msg.toLowerCase().includes("network") ||
+    cause?.code === "UND_ERR_CONNECT_TIMEOUT" ||
+    cause?.code === "ECONNRESET" ||
+    cause?.code === "ENOTFOUND"
+  );
+}
+
+/**
  * Try Gemini (all keys, with rotation + cooldown-aware retry).
- * If every Gemini key is exhausted and the rotator gives up with
- * QuotaExceededError, automatically fall back to Groq.
+ * Falls back to Groq when:
+ *   • QuotaExceededError — all Gemini keys exhausted / cooling
+ *   • Network/timeout error — Gemini endpoint unreachable (retrying another
+ *     key won't help; Groq uses a different endpoint)
  *
  * `usedProvider` is updated to reflect which provider actually answered.
  */
@@ -253,8 +274,9 @@ async function callAI(
     usedProvider.value = "gemini";
     return text;
   } catch (error) {
-    if (error instanceof QuotaExceededError) {
-      console.warn("[gen] All Gemini keys exhausted — falling back to Groq...");
+    if (error instanceof QuotaExceededError || isNetworkError(error)) {
+      const reason = error instanceof QuotaExceededError ? "quota exhausted" : "network error";
+      console.warn(`[gen] Gemini unavailable (${reason}) — falling back to Groq...`);
       const text = await callGroq(prompt, onRequest);
       usedProvider.value = "groq";
       return text;
@@ -368,6 +390,25 @@ export async function POST(req: NextRequest) {
     Object.entries(generatedFiles).forEach(([p, content]) => zip.file(p, content));
     const zipArrayBuffer = await zip.generateAsync({ type: "arraybuffer" });
 
+    // 4) Forward zip to local deploy server (non-fatal)
+    let deployStatus = "skipped";
+    const deployUrl = process.env.DEPLOY_URL;
+    if (deployUrl) {
+      try {
+        const deployRes = await fetch(deployUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/zip" },
+          body: zipArrayBuffer,
+          signal: AbortSignal.timeout(15_000), // 15 s timeout
+        });
+        deployStatus = deployRes.ok ? "ok" : `error:${deployRes.status}`;
+        console.log(`[gen] Deploy → ${deployUrl} — ${deployStatus}`);
+      } catch (err) {
+        deployStatus = "unreachable";
+        console.warn("[gen] Deploy server not reachable:", (err as Error).message);
+      }
+    }
+
     const providerModel =
       usedProvider.value === "groq" ? GROQ_MODEL : GEMINI_MODEL;
 
@@ -381,6 +422,7 @@ export async function POST(req: NextRequest) {
         "X-AI-Model": providerModel,
         "X-Generated-Files": String(filesToGenerate.length),
         "X-Gemini-Keys": `${rotator.availableCount}/${apiKeys.length}`,
+        "X-Deploy-Status": deployStatus,
       },
     });
   } catch (error: unknown) {
@@ -422,18 +464,29 @@ async function planArchitectureAi(input: {
 }): Promise<{ projectName: string; description: string; files: { path: string; description: string }[] }> {
   const langSpec =
     input.language === "python"
-      ? "Python 3.12+, FastAPI, pip, requirements.txt, pyproject.toml, Dockerfile, .env.example, README.md"
-      : "JavaScript/TypeScript, Express (Node.js), npm, package.json, tsconfig.json, Dockerfile, .env.example, README.md";
+      ? `Python 3.12+, FastAPI, pip
+- Entry point: main.py at the project root (run with: python main.py)
+- Dependencies: requirements.txt only — NO poetry, NO pyproject.toml
+- Include: main.py, requirements.txt, .env.example, Dockerfile, README.md`
+      : `JavaScript/TypeScript, Express (Node.js), npm
+- Entry point: src/index.ts
+- package.json scripts MUST be: { "dev": "tsx src/index.ts", "start": "node dist/index.js", "build": "tsc" }
+- devDependencies MUST include: tsx, typescript, @types/node, @types/express (and other @types needed)
+- Run with: npm install && npm run dev — this MUST work without any compilation step
+- Include: src/index.ts, package.json, tsconfig.json, .env.example, Dockerfile, README.md`;
 
   const prompt = `You are a senior software architect.
 Generate a COMPLETE production-ready backend project file structure for the given architecture.
 
-Language stack: ${langSpec}
+Language stack:
+${langSpec}
 
 Rules:
 - Plan exact folders and files.
 - Every file needs a detailed description of its responsibility.
 - Do NOT generate code. Output ONLY the JSON plan.
+- PYTHON ONLY: entry point MUST be main.py at root; never include pyproject.toml or poetry.
+- JS/TS ONLY: package.json MUST have scripts { "dev": "tsx src/index.ts", "start": "node dist/index.js", "build": "tsc" } and devDependencies with "tsx" so npm run dev works immediately after npm install.
 
 Return STRICT JSON only:
 {"projectName":"string","description":"string","files":[{"path":"relative/path.ext","description":"detailed responsibility"}]}
@@ -471,8 +524,8 @@ ${JSON.stringify({ nodes: input.nodes, edges: input.edges, techStack: input.tech
 // genCodeAi
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Files that need no AI call — always legitimately empty
-const EMPTY_FILE_RE = [/\.gitkeep$/, /\.gitignore$/, /__init__\.py$/];
+// Files that need no AI call — always legitimately empty or should be skipped
+const EMPTY_FILE_RE = [/\.gitkeep$/, /\.gitignore$/, /__init__\.py$/, /pyproject\.toml$/];
 
 async function genCodeAi(input: {
   filePath: string;
@@ -487,8 +540,17 @@ async function genCodeAi(input: {
 
   const langRules =
     input.language === "python"
-      ? "Python 3.12+, type hints, PEP 8, async/await FastAPI, real package versions in requirements.txt."
-      : "JavaScript/TypeScript, real dependencies in package.json, process.env, strict TS types.";
+      ? `Python 3.12+, type hints, PEP 8, async/await FastAPI, real package versions in requirements.txt.
+- Entry point is main.py at project root; app starts with: python main.py
+- Use pip + requirements.txt — never use poetry or pyproject.toml.
+- If generating main.py: include uvicorn.run(..., host="0.0.0.0", port=8000) so it starts directly.`
+      : `JavaScript/TypeScript, Express (Node.js), strict TS types, process.env for config.
+- If generating package.json:
+  * scripts MUST be: { "dev": "tsx src/index.ts", "start": "node dist/index.js", "build": "tsc" }
+  * devDependencies MUST include: "tsx", "typescript", "@types/node", "@types/express" (plus any other @types for packages used)
+  * All real package versions — no placeholders like "^x.x.x"
+- App MUST start by running: npm install && npm run dev — zero extra steps.
+- Never use ts-node, nodemon, or require("ts-node/register").`;
 
   // Abbreviated file list — just paths — to reduce token usage per call
   const filePaths = input.fullPlan.files.map((f) => f.path).join("\n");
