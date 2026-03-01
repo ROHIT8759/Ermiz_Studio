@@ -513,6 +513,18 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     .map((node) => node.data as NodeData)
     .filter((data): data is DatabaseBlock => data.kind === "database")
     .map((db) => ({ id: db.id, label: db.label || db.id }));
+  const allCrossTabTables = Object.values(graphs)
+    .flatMap((graph) => graph.nodes || [])
+    .map((node) => node.data as NodeData)
+    .filter((data): data is DatabaseBlock => data.kind === "database")
+    .flatMap((db) =>
+      (db.tables || []).map((t) => ({
+        dbLabel: db.label || db.id,
+        dbId: db.id,
+        tableName: t.name,
+        tableId: t.id,
+      })),
+    );
   const computeInfraIds = Object.values(graphs)
     .flatMap((graph) => graph.nodes || [])
     .map((node) => node.data as NodeData)
@@ -3064,11 +3076,41 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                                     style={selectStyle}
                                   >
                                     <option value="">target table</option>
-                                    {((nodeData as DatabaseBlock).tables || []).map((targetTable, i) => (
-                                      <option key={`${targetTable.name}-${i}`} value={targetTable.name}>
-                                        {targetTable.name}
-                                      </option>
-                                    ))}
+                                    {(() => {
+                                      const currentDbId = databaseNodeData?.id || "";
+                                      const localTables = ((nodeData as DatabaseBlock).tables || []).map((t) => ({
+                                        name: t.name,
+                                        label: t.name,
+                                      }));
+                                      const foreignTables = allCrossTabTables
+                                        .filter((ct) => ct.dbId !== currentDbId)
+                                        .map((ct) => ({
+                                          name: ct.tableName,
+                                          label: `${ct.dbLabel} → ${ct.tableName}`,
+                                        }));
+                                      return (
+                                        <>
+                                          {localTables.length > 0 && (
+                                            <optgroup label="This database">
+                                              {localTables.map((t, i) => (
+                                                <option key={`local-${t.name}-${i}`} value={t.name}>
+                                                  {t.label}
+                                                </option>
+                                              ))}
+                                            </optgroup>
+                                          )}
+                                          {foreignTables.length > 0 && (
+                                            <optgroup label="Other databases">
+                                              {foreignTables.map((t, i) => (
+                                                <option key={`foreign-${t.name}-${i}`} value={t.name}>
+                                                  {t.label}
+                                                </option>
+                                              ))}
+                                            </optgroup>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
                                   </select>
                                   <input
                                     value={field.references?.field || ""}
