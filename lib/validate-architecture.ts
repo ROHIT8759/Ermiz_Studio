@@ -106,24 +106,72 @@ function checkProcessBlocks(allNodes: Node[]): ValidationIssue[] {
 
 function checkApiBindings(allNodes: Node[], allEdges: Edge[]): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  const seenRoutes = new Map<string, string>(); // "METHOD /route" → nodeLabel
+
   for (const n of allNodes) {
     const d = n.data as Record<string, unknown>;
     if (d?.kind !== "api_binding") continue;
-    const route = d?.route as string | undefined;
-    if (!route || !route.trim()) {
-      issues.push({
-        severity: "error",
-        title: `API "${nodeLabel(n)}" has no route defined`,
-        detail: "Set a route (e.g. /api/users) so the AI knows which endpoint to generate.",
-        nodeId: n.id,
-      });
+
+    const protocol = (d?.protocol as string | undefined) ?? "rest";
+    const route    = (d?.route   as string | undefined) ?? "";
+    const method   = ((d?.method as string | undefined) ?? "").toUpperCase();
+    const lbl      = nodeLabel(n);
+
+    if (protocol === "rest") {
+      if (!route.trim()) {
+        issues.push({
+          severity: "error",
+          title: `API "${lbl}" has no route defined`,
+          detail: "Set a route (e.g. /api/users) so the AI knows which endpoint to generate.",
+          nodeId: n.id,
+        });
+      } else {
+        if (!route.startsWith("/")) {
+          issues.push({
+            severity: "error",
+            title: `API "${lbl}" route "${route}" must start with /`,
+            detail: `Change the route to "/${route}".`,
+            nodeId: n.id,
+          });
+        }
+        if (/\s/.test(route)) {
+          issues.push({
+            severity: "error",
+            title: `API "${lbl}" route "${route}" contains spaces`,
+            detail: "Routes cannot contain spaces. Use hyphens or %20.",
+            nodeId: n.id,
+          });
+        }
+      }
+
+      if (!method) {
+        issues.push({
+          severity: "error",
+          title: `API "${lbl}" has no HTTP method set`,
+          detail: "Set a method (GET, POST, PUT, PATCH, DELETE) in the Properties panel.",
+          nodeId: n.id,
+        });
+      } else if (route.trim() && route.startsWith("/") && !(/\s/.test(route))) {
+        const key = `${method} ${route.trim()}`;
+        if (seenRoutes.has(key)) {
+          issues.push({
+            severity: "error",
+            title: `Duplicate route: ${key}`,
+            detail: `"${lbl}" and "${seenRoutes.get(key)}" share the same route.`,
+            nodeId: n.id,
+          });
+        } else {
+          seenRoutes.set(key, lbl);
+        }
+      }
     }
+
     // Check that API binding connects to at least one process
     const hasOutgoing = allEdges.some((e) => e.source === n.id);
     if (!hasOutgoing) {
       issues.push({
         severity: "warning",
-        title: `API "${nodeLabel(n)}" has no connected process`,
+        title: `API "${lbl}" has no connected process`,
         detail: "An API endpoint without a linked process will generate a stub handler.",
         nodeId: n.id,
       });
@@ -145,9 +193,52 @@ function checkDatabaseBlocks(allNodes: Node[]): ValidationIssue[] {
         detail: "Define at least one table for the AI to generate a meaningful schema.",
         nodeId: n.id,
       });
+    } else {
+      for (const t of tables as Record<string, unknown>[]) {
+        const fields = (t.fields as unknown[]) ?? [];
+        if (fields.length === 0) {
+          issues.push({
+            severity: "warning",
+            title: `Table "${t.name as string}" in "${nodeLabel(n)}" has no columns`,
+            detail: "Add at least one column so the AI generates a useful schema.",
+            nodeId: n.id,
+          });
+        }
+      }
     }
   }
   return issues;
+}
+
+function checkQueueBlocks(allNodes: Node[]): ValidationIssue[] {
+  const VALID_DELIVERIES = ["at_least_once", "at_most_once", "exactly_once"];
+  const issues: ValidationIssue[] = [];
+  for (const n of allNodes) {
+    const d = n.data as Record<string, unknown>;
+    if (d?.kind !== "queue") continue;
+    const delivery = d?.delivery as string | undefined;
+    if (delivery && !VALID_DELIVERIES.includes(delivery)) {
+      issues.push({
+        severity: "error",
+        title: `Queue "${nodeLabel(n)}" has invalid delivery guarantee: "${delivery}"`,
+        detail: "Set delivery to at_least_once, at_most_once, or exactly_once.",
+        nodeId: n.id,
+      });
+    }
+  }
+  return issues;
+}
+
+function checkSelfLoops(allNodes: Node[], allEdges: Edge[]): ValidationIssue[] {
+  const nodeMap = new Map(allNodes.map((n) => [n.id, n]));
+  return allEdges
+    .filter((e) => e.source === e.target && nodeMap.has(e.source))
+    .map((e) => ({
+      severity: "warning" as Severity,
+      title: `"${nodeLabel(nodeMap.get(e.source)!)}" is connected to itself`,
+      detail: "Self-loops have no meaning in a backend architecture. Remove this edge.",
+      nodeId: e.source,
+    }));
 }
 
 function checkDuplicateLabels(allNodes: Node[]): ValidationIssue[] {
@@ -240,8 +331,10 @@ export function validateArchitecture(graphs: GraphMap): ValidationResult {
   if (noNodes) issues.push(noNodes);
   issues.push(...checkMissingLabels(allNodes));
   issues.push(...checkDanglingEdges(allNodes, allEdges));
+  issues.push(...checkSelfLoops(allNodes, allEdges));
   issues.push(...checkApiBindings(allNodes, allEdges));
   issues.push(...checkApiEndpointLinks(allNodes, graphs));
+  issues.push(...checkQueueBlocks(allNodes));
   issues.push(...checkDuplicateLabels(allNodes));
   issues.push(...checkOrphanNodes(allNodes, allEdges));
   issues.push(...checkProcessBlocks(allNodes));
