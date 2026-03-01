@@ -191,7 +191,6 @@ function ProfileButton({
           alt={displayName}
           width={34}
           height={34}
-          unoptimized
           onError={() => setAvatarFailed(true)}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />

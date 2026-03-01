@@ -2,11 +2,25 @@ import { prisma } from "./prisma";
 import type { Prisma } from "@prisma/client";
 
 const monthlyFreeCredits = Number(process.env.MONTHLY_FREE_CREDITS ?? 1000);
+const monthlyFreeCreditsBigInt = BigInt(process.env.MONTHLY_FREE_CREDITS ?? 1000);
 const resetDay =
   Number(process.env.FREE_RESET_DAY_OF_MONTH ?? 1) >= 1 &&
   Number(process.env.FREE_RESET_DAY_OF_MONTH ?? 1) <= 28
     ? Number(process.env.FREE_RESET_DAY_OF_MONTH ?? 1)
     : 1;
+
+/** Convert BigInt fields to numbers for JSON serialization. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function serializeBalance<T extends Record<string, any>>(obj: T | null): T | null {
+  if (!obj) return null;
+  const out = { ...obj } as Record<string, unknown>;
+  for (const key of Object.keys(out)) {
+    if (typeof out[key] === "bigint") {
+      out[key] = Number(out[key]);
+    }
+  }
+  return out as T;
+}
 
 export async function ensureUser(userId: string, email?: string) {
   const user = await prisma.user.upsert({
@@ -16,8 +30,8 @@ export async function ensureUser(userId: string, email?: string) {
       email: email ?? `${userId}@example.com`,
       creditBalance: {
         create: {
-          availableCredits: monthlyFreeCredits,
-          monthlyFreeCredits,
+          availableCredits: monthlyFreeCreditsBigInt,
+          monthlyFreeCredits: monthlyFreeCreditsBigInt,
           freeResetDayOfMonth: resetDay,
           lastResetAt: new Date(),
         },
@@ -45,10 +59,11 @@ export async function refreshMonthlyCredits(userId: string) {
 
   if (!needsReset) return balance;
 
+  const newCredits = balance.availableCredits + BigInt(monthlyFreeCredits);
   const updated = await prisma.creditBalance.update({
     where: { userId },
     data: {
-      availableCredits: balance.availableCredits + monthlyFreeCredits,
+      availableCredits: newCredits,
       lastResetAt: now,
     },
   });
@@ -57,7 +72,7 @@ export async function refreshMonthlyCredits(userId: string) {
     data: {
       userId,
       kind: "monthly_free_grant",
-      amount: monthlyFreeCredits,
+      amount: monthlyFreeCreditsBigInt,
       note: `Monthly free credit refresh on day ${resetDay}`,
     },
   });
@@ -77,21 +92,21 @@ export async function requireCredits(userId: string, amount: number) {
     throw new Error("balance not found");
   }
 
-  if (balance.availableCredits < amount) {
+  if (balance.availableCredits < BigInt(amount)) {
     throw new Error("insufficient credits");
   }
 
   const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const newBalance = await tx.creditBalance.update({
       where: { userId },
-      data: { availableCredits: { decrement: amount } },
+      data: { availableCredits: { decrement: BigInt(amount) } },
     });
 
     await tx.creditTransaction.create({
       data: {
         userId,
         kind: "usage",
-        amount: -amount,
+        amount: BigInt(-amount),
         note: "credit consumption",
       },
     });
@@ -117,16 +132,16 @@ export async function addCredits(
       where: { userId },
       create: {
         userId,
-        availableCredits: amount,
-        monthlyFreeCredits: monthlyFreeCredits,
+        availableCredits: BigInt(amount),
+        monthlyFreeCredits: monthlyFreeCreditsBigInt,
         freeResetDayOfMonth: resetDay,
         lastResetAt: new Date(),
       },
-      update: { availableCredits: { increment: amount } },
+      update: { availableCredits: { increment: BigInt(amount) } },
     });
 
     await tx.creditTransaction.create({
-      data: { userId, kind, amount, note },
+      data: { userId, kind, amount: BigInt(amount), note },
     });
 
     return newBalance;
