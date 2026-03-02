@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/logout", "/favicon.ico"];
 
-export async function proxy(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const bypassAuthForE2E =
     process.env.E2E_BYPASS_AUTH === "1" ||
@@ -41,14 +41,20 @@ export async function proxy(req: NextRequest) {
     }
   );
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-  if (!session) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", req.url);
-    return NextResponse.redirect(loginUrl);
+    if (!session) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("callbackUrl", req.url);
+      return NextResponse.redirect(loginUrl);
+    }
+  } catch {
+    // If Supabase is unreachable (e.g. paused project), allow the request
+    // through rather than blocking the user — the page/API will handle auth.
+    return res;
   }
 
   return res;
