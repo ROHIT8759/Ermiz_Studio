@@ -23,6 +23,7 @@ import {
   DatabaseTable,
   DatabaseRelationship,
 } from "@/lib/schema/node";
+import type { ValidationIssue } from "@/lib/validate-architecture";
 
 export type NodeKind =
   | "process"
@@ -103,6 +104,12 @@ type RFState = {
     tables: DatabaseTable[],
     relationships: DatabaseRelationship[],
   ) => void;
+  /** Node to select + pan-to on the canvas (set by clicking an error in GenCodeModal) */
+  focusNodeId: string | null;
+  setFocusNodeId: (id: string | null) => void;
+  /** Live validation issues — synced from GenCodeModal so PropertyInspector can show them */
+  validationIssues: ValidationIssue[];
+  setValidationIssues: (issues: ValidationIssue[]) => void;
 };
 
 const graphPresets: Record<GraphPreset, { nodes: Node[]; edges: Edge[] }> = {
@@ -216,6 +223,8 @@ export const useStore = create<RFState>((set, get) => {
     nodes: initialGraphs.api.nodes,
     edges: initialGraphs.api.edges,
     apiTableModalNodeId: null,
+    focusNodeId: null,
+    validationIssues: [],
 
     setActiveTab: (tab: WorkspaceTab) => {
       set((state) => {
@@ -1239,6 +1248,14 @@ export const useStore = create<RFState>((set, get) => {
 
     closeApiTableModal: () => {
       set({ apiTableModalNodeId: null });
+    },
+
+    setFocusNodeId: (id: string | null) => {
+      set({ focusNodeId: id });
+    },
+
+    setValidationIssues: (issues: ValidationIssue[]) => {
+      set({ validationIssues: issues });
     },
 
     pushTablesToDb: (
