@@ -14,6 +14,11 @@ export interface GenCodeModalProps {
   validationResult: ValidationResult;
   onConfirm: (language: Language) => void;
   onCancel: () => void;
+  /**
+   * Called when the user clicks a clickable error/warning row.
+   * Closes the modal and selects + pans to the relevant node on the canvas.
+   */
+  onFocusNode?: (nodeId: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,15 +26,15 @@ export interface GenCodeModalProps {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const C = {
-  panel:   "#151b24",
-  float:   "#1a2230",
-  border:  "#1e2836",
-  fg:      "#eef2f8",
-  muted:   "#6b7a99",
+  panel: "#151b24",
+  float: "#1a2230",
+  border: "#1e2836",
+  fg: "#eef2f8",
+  muted: "#6b7a99",
   primary: "#87a3ff",
-  green:   "#22c55e",
-  amber:   "#f59e0b",
-  red:     "#ef4444",
+  green: "#22c55e",
+  amber: "#f59e0b",
+  red: "#ef4444",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,32 +48,170 @@ const LANGUAGES: {
   icon: string;
   accent: string;
 }[] = [
-  { id: "javascript", name: "JavaScript", sub: "Node.js · TypeScript", icon: "JS", accent: "#f7df1e" },
-  { id: "python",     name: "Python",     sub: "FastAPI · Pydantic",   icon: "PY", accent: "#3b82f6" },
-];
+    { id: "javascript", name: "JavaScript", sub: "Node.js · TypeScript", icon: "JS", accent: "#f7df1e" },
+    { id: "python", name: "Python", sub: "FastAPI · Pydantic", icon: "PY", accent: "#3b82f6" },
+  ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Issue row
+// Issue row — clickable when it has a nodeId; has an inline AI hint button
 // ─────────────────────────────────────────────────────────────────────────────
 
-function IssueRow({ issue }: { issue: ValidationIssue }) {
+function IssueRow({
+  issue,
+  onFocusNode,
+}: {
+  issue: ValidationIssue;
+  onFocusNode?: (id: string) => void;
+}) {
+  const [hint, setHint] = useState<string | null>(null);
+  const [loadingHint, setLoadingHint] = useState(false);
+  const [hintError, setHintError] = useState(false);
+
   const isErr = issue.severity === "error";
   const color = isErr ? C.red : C.amber;
+  const canNavigate = !!issue.nodeId && !!onFocusNode;
+
+  const handleRowClick = () => {
+    if (canNavigate) onFocusNode!(issue.nodeId!);
+  };
+
+  const handleAiHint = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLoadingHint(true);
+    setHintError(false);
+    try {
+      const res = await fetch("/api/fix-hint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: issue.title, detail: issue.detail }),
+      });
+      if (!res.ok) throw new Error("non-ok");
+      const json = await res.json() as { hint?: string };
+      setHint(json.hint || "No suggestion available.");
+    } catch {
+      setHintError(true);
+      setHint("Could not load suggestion.");
+    } finally {
+      setLoadingHint(false);
+    }
+  };
+
   return (
-    <div style={{
-      display: "flex", gap: 9, alignItems: "flex-start",
-      padding: "8px 11px",
-      background: `color-mix(in srgb, ${color} 7%, ${C.panel})`,
-      border: `1px solid color-mix(in srgb, ${color} 24%, transparent)`,
-      borderRadius: 7, marginBottom: 5,
-    }}>
-      <span style={{ fontSize: 12, color, flexShrink: 0, marginTop: 1 }}>
+    <div
+      onClick={handleRowClick}
+      title={canNavigate ? "Click to navigate to this block" : undefined}
+      style={{
+        display: "flex",
+        gap: 9,
+        alignItems: "flex-start",
+        padding: "8px 11px",
+        background: `color-mix(in srgb, ${color} 7%, ${C.panel})`,
+        border: `1px solid color-mix(in srgb, ${color} 24%, transparent)`,
+        borderRadius: 7,
+        marginBottom: 5,
+        cursor: canNavigate ? "pointer" : "default",
+        transition: "background .12s, border-color .12s",
+      }}
+      onMouseEnter={(e) => {
+        if (canNavigate)
+          (e.currentTarget as HTMLDivElement).style.background =
+            `color-mix(in srgb, ${color} 14%, ${C.panel})`;
+      }}
+      onMouseLeave={(e) => {
+        if (canNavigate)
+          (e.currentTarget as HTMLDivElement).style.background =
+            `color-mix(in srgb, ${color} 7%, ${C.panel})`;
+      }}
+    >
+      {/* severity icon */}
+      <span style={{ fontSize: 12, color, flexShrink: 0, marginTop: 2 }}>
         {isErr ? "✕" : "⚠"}
       </span>
+
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, color: C.fg, lineHeight: 1.5 }}>{issue.title}</div>
+        {/* title row */}
+        <div
+          style={{
+            fontSize: 12,
+            color: C.fg,
+            lineHeight: 1.5,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          <span style={{ flex: 1 }}>{issue.title}</span>
+          {canNavigate && (
+            <span
+              style={{
+                fontSize: 10,
+                color: C.primary,
+                flexShrink: 0,
+                marginTop: 2,
+                whiteSpace: "nowrap",
+              }}
+            >
+              → Go to block
+            </span>
+          )}
+        </div>
+
+        {/* detail */}
         {issue.detail && (
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>→ {issue.detail}</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+            → {issue.detail}
+          </div>
+        )}
+
+        {/* AI hint section */}
+        {hint ? (
+          <div
+            style={{
+              marginTop: 5,
+              padding: "5px 8px",
+              background: `color-mix(in srgb, ${C.primary} 8%, ${C.panel})`,
+              border: `1px solid color-mix(in srgb, ${C.primary} 20%, transparent)`,
+              borderRadius: 5,
+              fontSize: 11,
+              color: hintError ? C.muted : C.primary,
+              lineHeight: 1.5,
+            }}
+          >
+            {hintError ? "⚠ " : "💡 "}{hint}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleAiHint}
+            disabled={loadingHint}
+            style={{
+              marginTop: 5,
+              background: "none",
+              border: `1px solid color-mix(in srgb, ${C.primary} 25%, transparent)`,
+              borderRadius: 4,
+              color: C.muted,
+              cursor: loadingHint ? "default" : "pointer",
+              fontSize: 10,
+              padding: "2px 7px",
+              opacity: loadingHint ? 0.6 : 1,
+              transition: "color .15s, border-color .15s",
+            }}
+            onMouseEnter={(e) => {
+              if (!loadingHint) {
+                (e.currentTarget as HTMLButtonElement).style.color = C.primary;
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  `color-mix(in srgb, ${C.primary} 55%, transparent)`;
+              }
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = C.muted;
+              (e.currentTarget as HTMLButtonElement).style.borderColor =
+                `color-mix(in srgb, ${C.primary} 25%, transparent)`;
+            }}
+          >
+            {loadingHint ? "Loading AI suggestion…" : "✦ Get AI fix suggestion"}
+          </button>
         )}
       </div>
     </div>
@@ -79,7 +222,12 @@ function IssueRow({ issue }: { issue: ValidationIssue }) {
 // Modal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function GenCodeModal({ validationResult, onConfirm, onCancel }: GenCodeModalProps) {
+export function GenCodeModal({
+  validationResult,
+  onConfirm,
+  onCancel,
+  onFocusNode,
+}: GenCodeModalProps) {
   const [lang, setLang] = useState<Language>("javascript");
   const [showWarnings, setShowWarnings] = useState(true);
 
@@ -93,8 +241,8 @@ export function GenCodeModal({ validationResult, onConfirm, onCancel }: GenCodeM
   }, [onCancel]);
 
   const summaryColor = errors.length > 0 ? C.red : warnings.length > 0 ? C.amber : C.green;
-  const summaryIcon  = errors.length > 0 ? "✕" : warnings.length > 0 ? "⚠" : "✓";
-  const summaryText  = errors.length > 0
+  const summaryIcon = errors.length > 0 ? "✕" : warnings.length > 0 ? "⚠" : "✓";
+  const summaryText = errors.length > 0
     ? `${errors.length} error${errors.length !== 1 ? "s" : ""} must be fixed before generating`
     : warnings.length > 0
       ? `${warnings.length} warning${warnings.length !== 1 ? "s" : ""} — you can still generate`
@@ -154,10 +302,21 @@ export function GenCodeModal({ validationResult, onConfirm, onCancel }: GenCodeM
           {/* Errors */}
           {errors.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.red, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 7 }}>
-                Errors — must fix ({errors.length})
+              <div style={{
+                fontSize: 10, fontWeight: 700, color: C.red,
+                letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 7,
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                <span>Errors — must fix ({errors.length})</span>
+                {errors.some((e) => e.nodeId) && (
+                  <span style={{ fontSize: 9, color: C.muted, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+                    click an error to jump to it
+                  </span>
+                )}
               </div>
-              {errors.map((i, idx) => <IssueRow key={idx} issue={i} />)}
+              {errors.map((i, idx) => (
+                <IssueRow key={idx} issue={i} onFocusNode={onFocusNode} />
+              ))}
             </div>
           )}
 
@@ -171,13 +330,18 @@ export function GenCodeModal({ validationResult, onConfirm, onCancel }: GenCodeM
                 </span>
                 <span style={{ fontSize: 11, color: C.muted }}>{showWarnings ? "▾" : "▸"}</span>
               </button>
-              {showWarnings && warnings.map((i, idx) => <IssueRow key={idx} issue={i} />)}
+              {showWarnings && warnings.map((i, idx) => (
+                <IssueRow key={idx} issue={i} onFocusNode={onFocusNode} />
+              ))}
             </div>
           )}
 
           {/* Language picker */}
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 10 }}>
+            <div style={{
+              fontSize: 10, fontWeight: 700, color: C.muted,
+              letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 10,
+            }}>
               Target Language
             </div>
             <div style={{ display: "flex", gap: 10 }}>

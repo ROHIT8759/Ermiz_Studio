@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ComponentType, useState, useCallback } from "react";
+import React, { ComponentType, useState, useCallback, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -52,14 +52,27 @@ interface ContextMenuState {
 }
 
 function FlowCanvasInner() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, focusNodeId, setFocusNodeId } =
     useStore();
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, setNodes, fitView } = useReactFlow();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">(
     "select",
   );
   const [showMiniMap, setShowMiniMap] = useState(false);
+
+  // When a node is focused from the error modal: select it and pan to it
+  useEffect(() => {
+    if (!focusNodeId) return;
+    setNodes((nds) =>
+      nds.map((n) => ({ ...n, selected: n.id === focusNodeId })),
+    );
+    const timer = setTimeout(() => {
+      fitView({ nodes: [{ id: focusNodeId }], duration: 500, padding: 0.4 });
+      setFocusNodeId(null);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [focusNodeId, setFocusNodeId, setNodes, fitView]);
 
   const handleContextMenu = useCallback(
     (event: React.MouseEvent) => {

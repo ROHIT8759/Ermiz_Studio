@@ -368,6 +368,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
     updateInput,
     addOutput,
     removeOutput,
+    validationIssues,
   } = useStore(
     useShallow((state) => ({
       nodes: state.nodes,
@@ -381,6 +382,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
       updateInput: state.updateInput,
       addOutput: state.addOutput,
       removeOutput: state.removeOutput,
+      validationIssues: state.validationIssues,
     })),
   );
 
@@ -425,6 +427,42 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
   const [newSocketEvent, setNewSocketEvent] = useState("");
 
   const selectedNode = nodes.find((n) => n.selected);
+
+  // ── Validation feedback helpers ──────────────────────────────────────────
+  /** Issues that belong to the currently selected node */
+  const nodeIssues = selectedNode
+    ? validationIssues.filter((i) => i.nodeId === selectedNode.id)
+    : [];
+
+  /**
+   * Returns a red-border override for an input style when any issue's title
+   * or detail contains one of the supplied lowercase keyword substrings.
+   */
+  const fieldErrStyle = (
+    ...keywords: string[]
+  ): React.CSSProperties => {
+    const hasMatch = nodeIssues.some((issue) => {
+      const hay = `${issue.title} ${issue.detail ?? ""}`.toLowerCase();
+      return keywords.some((kw) => hay.includes(kw));
+    });
+    return hasMatch
+      ? { border: "1px solid #ef4444", boxShadow: "0 0 0 2px rgba(239,68,68,0.15)" }
+      : {};
+  };
+
+  /** Returns an asterisk span when any issue matches the keywords */
+  const RequiredStar = ({ keywords }: { keywords: string[] }) => {
+    const hasMatch = nodeIssues.some((issue) => {
+      const hay = `${issue.title} ${issue.detail ?? ""}`.toLowerCase();
+      return keywords.some((kw) => hay.includes(kw));
+    });
+    if (!hasMatch) return null;
+    return (
+      <span style={{ color: "#ef4444", marginLeft: 3, fontSize: 11 }} title="Required — has a validation error">
+        *
+      </span>
+    );
+  };
 
   const panelStyle: React.CSSProperties = {
     width,
@@ -883,16 +921,53 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
         </div>
       </div>
 
+      {/* ── Validation issues for this node ─────────────────────────── */}
+      {nodeIssues.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {nodeIssues.map((issue, idx) => {
+            const isErr = issue.severity === "error";
+            const color = isErr ? "#ef4444" : "#f59e0b";
+            return (
+              <div
+                key={idx}
+                style={{
+                  display: "flex",
+                  gap: 7,
+                  alignItems: "flex-start",
+                  padding: "6px 9px",
+                  background: `color-mix(in srgb, ${color} 9%, var(--panel))`,
+                  border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
+                  borderRadius: 6,
+                  fontSize: 11,
+                  lineHeight: 1.4,
+                }}
+              >
+                <span style={{ color, flexShrink: 0, marginTop: 1 }}>{isErr ? "✕" : "⚠"}</span>
+                <div>
+                  <div style={{ color: "var(--foreground)", fontWeight: 600 }}>{issue.title}</div>
+                  {issue.detail && (
+                    <div style={{ color: "var(--muted)", marginTop: 2 }}>{issue.detail}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Common: Label */}
       <div>
-        <div style={labelStyle}>Label</div>
+        <div style={labelStyle}>
+          Label
+          <RequiredStar keywords={["no label", "label is empty", "label missing", "needs a label"]} />
+        </div>
         <input
           type="text"
           value={nodeData.label || ""}
           onChange={(e) =>
             handleUpdate({ label: e.target.value } as Partial<NodeData>)
           }
-          style={inputStyle}
+          style={{ ...inputStyle, ...fieldErrStyle("no label", "label is empty", "label missing", "needs a label") }}
         />
       </div>
 
@@ -4346,7 +4421,10 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
           {isRestProtocol ? (
             <div style={{ display: "flex", gap: 8 }}>
               <div style={{ width: 100 }}>
-                <div style={labelStyle}>Method</div>
+                <div style={labelStyle}>
+                  Method
+                  <RequiredStar keywords={["no method", "method is empty", "http method"]} />
+                </div>
                 <select
                   value={(nodeData as ApiBinding).method}
                   onChange={(e) =>
@@ -4354,7 +4432,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                       method: e.target.value,
                     } as Partial<ApiBinding>)
                   }
-                  style={selectStyle}
+                  style={{ ...selectStyle, ...fieldErrStyle("no method", "method is empty", "http method") }}
                 >
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
@@ -4364,7 +4442,10 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                 </select>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={labelStyle}>Route</div>
+                <div style={labelStyle}>
+                  Route
+                  <RequiredStar keywords={["no route", "route is empty", "route missing", "needs a route"]} />
+                </div>
                 <input
                   type="text"
                   value={(nodeData as ApiBinding).route || ""}
@@ -4372,7 +4453,7 @@ export function PropertyInspector({ width = 320 }: { width?: number }) {
                     handleUpdate({ route: e.target.value } as Partial<ApiBinding>)
                   }
                   placeholder="/api/resource"
-                  style={inputStyle}
+                  style={{ ...inputStyle, ...fieldErrStyle("no route", "route is empty", "route missing", "needs a route") }}
                 />
               </div>
             </div>

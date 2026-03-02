@@ -25,6 +25,8 @@ export default function Home() {
   const loadGraphPreset = useStore((state) => state.loadGraphPreset);
   const exportGraphs = useStore((state) => state.exportGraphs);
   const importGraphs = useStore((state) => state.importGraphs);
+  const setFocusNodeId = useStore((state) => state.setFocusNodeId);
+  const setValidationIssues = useStore((state) => state.setValidationIssues);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("api");
   const [resetLayoutSignal, setResetLayoutSignal] = useState(0);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -221,9 +223,25 @@ export default function Home() {
   // Open the unified Generate modal (validation + language picker).
   const handleGenerateCodeClick = useCallback(() => {
     const graphs = exportGraphs();
-    setValidationResult(validateArchitecture(graphs));
+    const result = validateArchitecture(graphs);
+    setValidationResult(result);
+    // Sync all issues to the store so PropertyInspector can highlight fields
+    setValidationIssues([...result.errors, ...result.warnings]);
     setIsGenModalOpen(true);
-  }, [exportGraphs]);
+  }, [exportGraphs, setValidationIssues]);
+
+  /**
+   * Called when the user clicks a clickable error/warning in the modal.
+   * Closes the modal and pans + selects the relevant node on the canvas.
+   */
+  const handleFocusNode = useCallback(
+    (nodeId: string) => {
+      setIsGenModalOpen(false);
+      setValidationResult(null);
+      setFocusNodeId(nodeId);
+    },
+    [setFocusNodeId],
+  );
 
   const handleGenerateCode = async (language: "javascript" | "python" = "javascript") => {
     setIsGenModalOpen(false);
@@ -631,7 +649,12 @@ export default function Home() {
         <GenCodeModal
           validationResult={validationResult}
           onConfirm={handleGenerateCode}
-          onCancel={() => { setIsGenModalOpen(false); setValidationResult(null); }}
+          onCancel={() => {
+            setIsGenModalOpen(false);
+            setValidationResult(null);
+            setValidationIssues([]);
+          }}
+          onFocusNode={handleFocusNode}
         />
       )}
 
